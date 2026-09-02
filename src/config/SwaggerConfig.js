@@ -9,11 +9,15 @@ const swaggerOptions = {
       description: "API documentation for encryption app",
     },
     servers: [
+      {
+        url: "https://encryption-api-b67f.onrender.com", // change in prod
+        description: "API server",
+      },
        {
         url: "http://localhost:6001", // change in prod
         description: "Local server",
       },
-      
+      //https://encryption-api-b67f.onrender.com/api/v1/docs/
      
     ],
     components: {
