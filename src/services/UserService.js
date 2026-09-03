@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
+const Device = require("../models/Device");
 const userRepo = require("../repositories/UserRepository");
 const notificationRepo = require("../repositories/NotificationRepository");
 const redis = require("../config/RedisConfig");
@@ -1189,6 +1190,33 @@ async function getAllUsers({
         // Build User Responses
         // ======================================
 
+        // Device registrations are stored in the separate devices collection.
+        // Resolve the latest active device for every user on this page in one
+        // query so the admin list reflects the current registration flow.
+        const userIds = users.map(user => user._id);
+        const latestDevices = userIds.length
+            ? await Device.aggregate([
+                {
+                    $match: {
+                        userId: { $in: userIds },
+                        status: "ACTIVE"
+                    }
+                },
+                { $sort: { lastSeenAt: -1, updatedAt: -1 } },
+                {
+                    $group: {
+                        _id: "$userId",
+                        deviceType: { $first: "$deviceType" },
+                        lastSeenAt: { $first: "$lastSeenAt" }
+                    }
+                }
+            ])
+            : [];
+
+        const latestDeviceByUserId = new Map(
+            latestDevices.map(device => [device._id.toString(), device])
+        );
+
         const userResponses =
             await Promise.all(
 
@@ -1198,6 +1226,13 @@ async function getAllUsers({
                         await buildAppUserResponse(
                             user
                         );
+
+                    const latestDevice = latestDeviceByUserId.get(user._id.toString());
+
+                    if (latestDevice) {
+                        response.deviceType = latestDevice.deviceType || null;
+                        response.lastLogin = latestDevice.lastSeenAt || null;
+                    }
 
 
                     // ==================================
