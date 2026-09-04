@@ -24,6 +24,27 @@ async function register(body, context = {}) {
   }
 
   const deviceId = body.deviceId.trim();
+  const activeDevices = await securityRepo.findActiveDevices(payload.userId);
+  const devicesToReplace = activeDevices.filter(item => item.deviceId !== deviceId);
+  const activeDevice = devicesToReplace[0];
+  if (activeDevice && body.replaceExistingDevice !== true) {
+    return buildResponse(409, "Device replacement confirmation required", {
+      code: "DEVICE_REPLACEMENT_CONFIRMATION_REQUIRED",
+      activeDevice: {
+        deviceId: activeDevice.deviceId,
+        deviceType: activeDevice.deviceType,
+        deviceName: activeDevice.deviceName || "Mobile device",
+        lastSeenAt: activeDevice.lastSeenAt || null,
+        registeredAt: activeDevice.createdAt || null
+      }
+    });
+  }
+  if (activeDevice && body.replacedDeviceId && !devicesToReplace.some(item => item.deviceId === body.replacedDeviceId)) {
+    return buildResponse(409, "The active device changed. Confirm replacement again", {
+      code: "ACTIVE_DEVICE_CHANGED",
+      activeDevice
+    });
+  }
   const device = await securityRepo.registerDevice(payload.userId, {
     deviceId,
     deviceType,
@@ -34,8 +55,37 @@ async function register(body, context = {}) {
   });
   const consumed = await securityRepo.consumeActivation(payload.activationId, payload.userId, deviceId);
   if (!consumed) return buildResponse(409, "Activation code was already used");
+  await User.updateOne({ _id: payload.userId }, { $set: { activeDeviceId: deviceId } });
+  const replacedDeviceIds = devicesToReplace.map(item => item.deviceId);
+  if (replacedDeviceIds.length) {
+    await Promise.all([
+      securityRepo.revokeOtherDevices(payload.userId, deviceId),
+      RefreshToken.updateMany(
+        { userId: payload.userId, deviceId: { $in: replacedDeviceIds }, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      ),
+      DevicePrekey.deleteMany({ userId: payload.userId, deviceId: { $in: replacedDeviceIds } }),
+      OneTimePrekey.deleteMany({ userId: payload.userId, deviceId: { $in: replacedDeviceIds } })
+    ]);
+  }
   const tokens = await tokenService.issueTokenPair(payload.userId, deviceId);
   await securityRepo.logSecurityEvent({ userId: payload.userId, deviceId, type: "DEVICE_REGISTERED", outcome: "SUCCESS", ipAddress: context.ip, metadata: { deviceType, identityKeyAlgorithm: device.identityKeyAlgorithm } });
+  if (replacedDeviceIds.length) {
+    const { disconnectDevice } = require("../socket/PresenceService");
+    await Promise.all(replacedDeviceIds.map(replacedDeviceId => disconnectDevice(
+      String(payload.userId),
+      replacedDeviceId,
+      { reason: "REPLACED_BY_NEW_DEVICE", replacementDevice: { deviceId, deviceType, deviceName: device.deviceName || "Mobile device" } }
+    )));
+    await securityRepo.logSecurityEvent({
+      userId: payload.userId,
+      deviceId,
+      type: "DEVICE_REPLACED",
+      outcome: "SUCCESS",
+      ipAddress: context.ip,
+      metadata: { replacedDeviceIds }
+    });
+  }
   return buildResponse(201, "Device registered", { userId: payload.userId, deviceId, ...tokens });
 }
 

@@ -10,10 +10,12 @@ module.exports = async function auth(req, res, next) {
     const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET);
     if (payload.purpose !== "ACCESS") throw new Error("Invalid purpose");
     const [user, device] = await Promise.all([
-      User.findOne({ _id: payload.userId, status: 1 }).select("_id").lean(),
+      User.findOne({ _id: payload.userId, status: 1 }).select("_id activeDeviceId").lean(),
       Device.findOne({ userId: payload.userId, deviceId: payload.deviceId, status: "ACTIVE" }).select("_id").lean()
     ]);
-    if (!user || !device) throw new Error("User or device is inactive");
+    if (!user || !device || (user.activeDeviceId && user.activeDeviceId !== payload.deviceId)) {
+      throw new Error("User or device is inactive");
+    }
     req.user = payload;
     return next();
   } catch (_error) {

@@ -46,11 +46,14 @@ module.exports = function initializeSocket(httpServer) {
 
     try {
       const [user, device, session] = await Promise.all([
-        User.findOne({ _id: payload.userId, status: 1 }).select("_id").lean(),
+        User.findOne({ _id: payload.userId, status: 1 }).select("_id activeDeviceId").lean(),
         Device.findOne({ userId: payload.userId, deviceId: payload.deviceId, status: "ACTIVE" }).select("_id").lean(),
         RefreshToken.exists({ userId: payload.userId, deviceId: payload.deviceId, revokedAt: null, expiresAt: { $gt: new Date() } })
       ]);
       if (!user) return next(socketAuthError("AUTHENTICATION_FAILED", "User is blocked or unavailable"));
+      if (user.activeDeviceId && user.activeDeviceId !== payload.deviceId) {
+        return next(socketAuthError("DEVICE_NOT_REGISTERED", "This account is active on another device"));
+      }
       if (!device) return next(socketAuthError("DEVICE_NOT_REGISTERED", "Device is not active"));
       if (!session) return next(socketAuthError("AUTHENTICATION_FAILED", "Device session has ended"));
       socket.data.userId = String(payload.userId);

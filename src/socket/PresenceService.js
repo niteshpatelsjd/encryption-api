@@ -10,11 +10,15 @@ let presenceServer = null;
 
 function setPresenceServer(io) { presenceServer = io; }
 
-async function disconnectDevice(userId, deviceId) {
+async function disconnectDevice(userId, deviceId, sessionRevokedPayload = null) {
   if (!presenceServer) return;
   const sockets = await presenceServer.in(`user:${userId}`).fetchSockets();
-  sockets.filter(socket => String(socket.data.deviceId) === String(deviceId))
-    .forEach(socket => socket.disconnect(true));
+  const deviceSockets = sockets.filter(socket => String(socket.data.deviceId) === String(deviceId));
+  if (sessionRevokedPayload) {
+    deviceSockets.forEach(socket => socket.emit(SocketEvents.SESSION_REVOKED, sessionRevokedPayload));
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  deviceSockets.forEach(socket => socket.disconnect(true));
 }
 
 function presenceRoom(userId) {

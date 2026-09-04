@@ -29,9 +29,18 @@ async function activate(body, context = {}) {
   if (!record.userId || record.userId.status !== 1) return buildResponse(403, "Assigned user is blocked or unavailable");
   const pending = await securityRepo.setActivationPending(record._id);
   if (!pending) return buildResponse(409, "Activation code is unavailable");
+  const activeDevices = await securityRepo.findActiveDevices(record.userId._id);
+  const currentDevice = activeDevices.find(device => device.deviceId === record.userId.activeDeviceId) || activeDevices[0];
+  const activeDevice = currentDevice ? {
+    deviceId: currentDevice.deviceId,
+    deviceType: currentDevice.deviceType,
+    deviceName: currentDevice.deviceName || "Mobile device",
+    lastSeenAt: currentDevice.lastSeenAt || null,
+    registeredAt: currentDevice.createdAt || null
+  } : null;
   const activationToken = jwt.sign({ purpose: "DEVICE_ACTIVATION", activationId: record._id.toString(), userId: record.userId._id.toString() }, secret(), { expiresIn: `${ACTIVATION_TTL_MINUTES}m`, issuer: "encryption-api" });
   await securityRepo.logSecurityEvent({ userId: record.userId._id, type: "ACTIVATION_VALIDATED", outcome: "SUCCESS", ipAddress: context.ip });
-  return buildResponse(200, "Activation code validated", { userId: record.userId._id, activationToken, expiresInSeconds: ACTIVATION_TTL_MINUTES * 60 });
+  return buildResponse(200, "Activation code validated", { userId: record.userId._id, activationToken, expiresInSeconds: ACTIVATION_TTL_MINUTES * 60, activeDevice });
 }
 
 function verifyActivationToken(token) {

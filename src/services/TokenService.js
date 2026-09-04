@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 const RefreshToken = require("../models/RefreshToken");
+const Device = require("../models/Device");
+const User = require("../models/User");
 const { hash, randomToken } = require("../utils/security");
 const { ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS } = require("../constants/SecurityConstants");
 
@@ -33,6 +35,11 @@ async function rotate(refreshToken) {
     { new: true }
   );
   if (!record) return null;
+  const [activeDevice, user] = await Promise.all([
+    Device.exists({ userId: record.userId, deviceId: record.deviceId, status: "ACTIVE" }),
+    User.findOne({ _id: record.userId, status: 1 }).select("activeDeviceId").lean()
+  ]);
+  if (!activeDevice || !user || (user.activeDeviceId && user.activeDeviceId !== record.deviceId)) return null;
   const replacement = await createRefreshToken(record.userId, record.deviceId);
   record.replacedByTokenHash = hash(replacement.token);
   await record.save();

@@ -16,7 +16,15 @@ const listDevices = (query, skip, limit) => Device.find(query)
   .lean();
 const countDevices = query => Device.countDocuments(query);
 const revokeDevice = (userId, deviceId) => Device.findOneAndUpdate({ userId, deviceId, status: "ACTIVE" }, { $set: { status: "REVOKED", revokedAt: new Date() } }, { new: true });
+const findActiveDevices = userId => Device.find({ userId, status: "ACTIVE" })
+  .select("deviceId deviceType deviceName lastSeenAt createdAt updatedAt")
+  .sort({ lastSeenAt: -1, createdAt: -1 })
+  .lean();
+const revokeOtherDevices = (userId, deviceId) => Device.updateMany(
+  { userId, deviceId: { $ne: deviceId }, status: "ACTIVE" },
+  { $set: { status: "REVOKED", revokedAt: new Date() } }
+);
 const findActiveDevice = (userId, deviceId) => Device.findOne({ userId, deviceId, status: "ACTIVE" });
 const logSecurityEvent = data => SecurityEvent.create(data).catch(() => null);
 
-module.exports = { createActivation, findActivation, findActivationById, setActivationPending, consumeActivation, registerDevice, listDevices, countDevices, revokeDevice, findActiveDevice, logSecurityEvent };
+module.exports = { createActivation, findActivation, findActivationById, setActivationPending, consumeActivation, registerDevice, listDevices, countDevices, revokeDevice, findActiveDevices, revokeOtherDevices, findActiveDevice, logSecurityEvent };

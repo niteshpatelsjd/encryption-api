@@ -61,6 +61,12 @@ const UserSchema = new mongoose.Schema(
       default: null
     },
 
+    activeDeviceId: {
+      type: String,
+      default: null,
+      index: true
+    },
+
 
     isEmailVerified: {
       type: Boolean,

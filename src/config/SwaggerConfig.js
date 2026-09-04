@@ -141,6 +141,14 @@ const swaggerOptions = {
             registrationId: {
               type: "integer",
               example: 12345
+            },
+            replaceExistingDevice: {
+              type: "boolean",
+              description: "Must be true when activation reports an existing active device"
+            },
+            replacedDeviceId: {
+              type: "string",
+              description: "Device ID shown to and confirmed by the user before replacement"
             }
           }
         },
