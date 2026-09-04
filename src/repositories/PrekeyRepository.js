@@ -20,8 +20,18 @@ async function insertOneTimePrekeys(userId, deviceId, keys) {
 }
 
 const findSignedPrekey = (userId, deviceId) => DevicePrekey.findOne({ userId, deviceId }).lean();
-const findActiveDevices = userId => Device.find({ userId, status: "ACTIVE" }).lean();
+const findSignedPrekeys = (userId, deviceIds) => DevicePrekey.find({ userId, deviceId: { $in: deviceIds } }).lean();
+const findActiveDevices = userId => Device.find({ userId, status: "ACTIVE" })
+  .select("deviceId registrationId identityKey identityKeyAlgorithm")
+  .lean();
 const countAvailable = (userId, deviceId) => OneTimePrekey.countDocuments({ userId, deviceId, status: "AVAILABLE" });
+const countAvailableForDevices = async (userId, deviceIds) => {
+  const counts = await OneTimePrekey.aggregate([
+    { $match: { userId, deviceId: { $in: deviceIds }, status: "AVAILABLE" } },
+    { $group: { _id: "$deviceId", count: { $sum: 1 } } }
+  ]);
+  return new Map(counts.map(item => [item._id, item.count]));
+};
 
 const claimOneTimePrekey = (userId, deviceId, claimant) => OneTimePrekey.findOneAndUpdate(
   { userId, deviceId, status: "AVAILABLE" },
@@ -41,8 +51,10 @@ module.exports = {
   upsertSignedPrekey,
   insertOneTimePrekeys,
   findSignedPrekey,
+  findSignedPrekeys,
   findActiveDevices,
   countAvailable,
+  countAvailableForDevices,
   claimOneTimePrekey,
   deleteForDevice,
   deleteForUser

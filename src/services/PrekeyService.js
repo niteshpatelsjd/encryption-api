@@ -43,11 +43,21 @@ async function bundle(targetUserId, claimant) {
   if (!claimant?.userId || !claimant?.deviceId) return buildResponse(401, "Authenticated device is required");
   const devices = await prekeyRepo.findActiveDevices(targetUserId);
   if (!devices.length) return buildResponse(404, "No active devices found");
-  const bundles = (await Promise.all(devices.map(async device => {
-    const signed = await prekeyRepo.findSignedPrekey(targetUserId, device.deviceId);
-    if (!signed) return null;
-    const claimed = await prekeyRepo.claimOneTimePrekey(targetUserId, device.deviceId, claimant);
-    const availablePreKeyCount = await prekeyRepo.countAvailable(targetUserId, device.deviceId);
+  const deviceIds = devices.map(device => device.deviceId);
+  const signedPrekeys = await prekeyRepo.findSignedPrekeys(targetUserId, deviceIds);
+  const signedByDevice = new Map(signedPrekeys.map(prekey => [prekey.deviceId, prekey]));
+  const eligibleDevices = devices.filter(device => signedByDevice.has(device.deviceId));
+  if (!eligibleDevices.length) return buildResponse(404, "No prekey bundles available");
+  const eligibleDeviceIds = eligibleDevices.map(device => device.deviceId);
+  const claimedByDevice = new Map(await Promise.all(eligibleDevices.map(async device => [
+    device.deviceId,
+    await prekeyRepo.claimOneTimePrekey(targetUserId, device.deviceId, claimant)
+  ])));
+  const availableCounts = await prekeyRepo.countAvailableForDevices(targetUserId, eligibleDeviceIds);
+  const bundles = eligibleDevices.map(device => {
+    const signed = signedByDevice.get(device.deviceId);
+    const claimed = claimedByDevice.get(device.deviceId);
+    const availablePreKeyCount = availableCounts.get(device.deviceId) ?? 0;
     return {
       deviceId: device.deviceId,
       registrationId: device.registrationId,
@@ -58,8 +68,7 @@ async function bundle(targetUserId, claimant) {
       availablePreKeyCount,
       preKeyLow: availablePreKeyCount < PREKEY_LOW_THRESHOLD
     };
-  }))).filter(Boolean);
-  if (!bundles.length) return buildResponse(404, "No prekey bundles available");
+  });
   return buildResponse(200, "Public prekey bundle fetched", { userId: targetUserId, devices: bundles });
 }
 

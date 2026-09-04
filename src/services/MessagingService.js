@@ -22,34 +22,35 @@ const failure = (clientMessageId, errorCode = ErrorCodes.INVALID_MESSAGE) => ({
 
 async function authorize(senderUserId, senderDeviceId, message) {
   const [activeUser, activeDevice, conversation, senderMember] = await Promise.all([
-    User.exists({ _id: senderUserId, status: 1 }),
+    User.findOne({ _id: senderUserId, status: 1 }).select("disappearingMessagesEnabled").lean(),
     Device.exists({ userId: senderUserId, deviceId: senderDeviceId, status: "ACTIVE" }),
     Conversation.findOne({ _id: message.conversationId, status: 1 }).select("_id").lean(),
     ConversationMember.exists({ conversationId: message.conversationId, userId: senderUserId, status: 1 })
   ]);
-  if (!activeUser || !activeDevice) return ErrorCodes.DEVICE_REVOKED;
-  if (!conversation || !senderMember) return ErrorCodes.UNAUTHORIZED_MESSAGE_ACCESS;
+  if (!activeUser || !activeDevice) return { errorCode: ErrorCodes.DEVICE_REVOKED };
+  if (!conversation || !senderMember) return { errorCode: ErrorCodes.UNAUTHORIZED_MESSAGE_ACCESS };
 
   const recipientUserIds = [...new Set(message.envelopes.map(envelope => envelope.recipientUserId))];
-  const memberCount = await ConversationMember.countDocuments({
-    conversationId: message.conversationId,
-    userId: { $in: recipientUserIds },
-    status: 1
-  });
-  if (memberCount !== recipientUserIds.length) return ErrorCodes.INVALID_RECIPIENT;
-
-  const devices = await Device.find({
-    status: "ACTIVE",
-    $or: message.envelopes.map(envelope => ({
-      userId: envelope.recipientUserId,
-      deviceId: envelope.recipientDeviceId
-    }))
-  }).select("userId deviceId").lean();
+  const [memberCount, devices] = await Promise.all([
+    ConversationMember.countDocuments({
+      conversationId: message.conversationId,
+      userId: { $in: recipientUserIds },
+      status: 1
+    }),
+    Device.find({
+      status: "ACTIVE",
+      $or: message.envelopes.map(envelope => ({
+        userId: envelope.recipientUserId,
+        deviceId: envelope.recipientDeviceId
+      }))
+    }).select("userId deviceId").lean()
+  ]);
+  if (memberCount !== recipientUserIds.length) return { errorCode: ErrorCodes.INVALID_RECIPIENT };
   const activeTargets = new Set(devices.map(device => `${device.userId}:${device.deviceId}`));
   if (message.envelopes.some(envelope => !activeTargets.has(`${envelope.recipientUserId}:${envelope.recipientDeviceId}`))) {
-    return ErrorCodes.DEVICE_NOT_FOUND;
+    return { errorCode: ErrorCodes.DEVICE_NOT_FOUND };
   }
-  return null;
+  return { errorCode: null, senderPreference: activeUser };
 }
 
 function deliveryPayloads(message) {
@@ -75,24 +76,26 @@ function deliveryPayloads(message) {
 }
 
 async function send({ senderUserId, senderDeviceId, payload }) {
+  const startedAt = Date.now();
   const validation = validateMessage(payload);
   if (validation.errorCode) return failure(payload?.clientMessageId, validation.errorCode);
   const messageData = validation.value;
-  const authorizationError = await authorize(senderUserId, senderDeviceId, messageData);
-  if (authorizationError) return failure(messageData.clientMessageId, authorizationError);
+  const [authorization, actionTarget] = await Promise.all([
+    authorize(senderUserId, senderDeviceId, messageData),
+    messageData.action
+      ? messageRepo.findActionTarget(messageData.conversationId, messageData.action.targetMessageId)
+      : Promise.resolve(null)
+  ]);
+  if (authorization.errorCode) return failure(messageData.clientMessageId, authorization.errorCode);
+  const senderPreference = authorization.senderPreference;
 
-  let actionTarget = null;
   if (messageData.action) {
-    actionTarget = await messageRepo.findActionTarget(messageData.conversationId, messageData.action.targetMessageId);
     if (!actionTarget) return failure(messageData.clientMessageId, ErrorCodes.MESSAGE_NOT_FOUND);
     if (["EDIT", "DELETE"].includes(messageData.action.type) && String(actionTarget.senderUserId) !== String(senderUserId)) {
       return failure(messageData.clientMessageId, ErrorCodes.UNAUTHORIZED_MESSAGE_ACCESS);
     }
   }
 
-  const senderPreference = await User.findById(senderUserId)
-    .select("disappearingMessagesEnabled")
-    .lean();
   const expiresAt = actionTarget
     ? actionTarget.expiresAt || null
     : senderPreference?.disappearingMessagesEnabled
@@ -105,18 +108,19 @@ async function send({ senderUserId, senderDeviceId, payload }) {
     senderDeviceId,
     expiresAt
   });
-  if (result.created) {
-    await conversationRepo.restoreForUsers(result.message.conversationId, [
+  await Promise.all([
+    result.created ? conversationRepo.restoreForUsers(result.message.conversationId, [
       senderUserId,
       ...new Set(messageData.envelopes.map(envelope => envelope.recipientUserId))
-    ]);
-  }
-  if (!messageData.action) await messageRepo.updateConversationActivity(result.message);
+    ]) : Promise.resolve(),
+    !messageData.action ? messageRepo.updateConversationActivity(result.message) : Promise.resolve()
+  ]);
 
   logger.info("Encrypted message accepted", {
     serverMessageId: result.message._id,
     conversationId: result.message.conversationId,
-    duplicate: !result.created
+    duplicate: !result.created,
+    durationMs: Date.now() - startedAt
   });
   return {
     success: true,

@@ -7,8 +7,6 @@ async function findByClientMessageId(senderUserId, senderDeviceId, clientMessage
 }
 
 async function createIdempotent(data) {
-  const existing = await findByClientMessageId(data.senderUserId, data.senderDeviceId, data.clientMessageId);
-  if (existing) return { message: existing, created: false };
   try {
     return { message: await Message.create(data), created: true };
   } catch (error) {

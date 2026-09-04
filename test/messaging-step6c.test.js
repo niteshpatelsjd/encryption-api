@@ -64,13 +64,13 @@ test("message validation accepts safe encrypted action metadata", () => {
   assert.equal(validateMessage(validPayload({ action: { type: "UNKNOWN", targetMessageId } })).errorCode, "INVALID_MESSAGE");
 });
 
-test("duplicate client message returns the existing persisted message", async () => {
+test("duplicate client message uses the unique index and returns the existing persisted message", async () => {
   const originalFind = Message.findOne;
   const originalCreate = Message.create;
   const existing = { _id: new mongoose.Types.ObjectId(), clientMessageId: "existing" };
   let createCalled = false;
   Message.findOne = async () => existing;
-  Message.create = async () => { createCalled = true; };
+  Message.create = async () => { createCalled = true; const error = new Error("duplicate"); error.code = 11000; throw error; };
   try {
     const result = await messageRepo.createIdempotent({
       senderUserId: new mongoose.Types.ObjectId(),
@@ -79,7 +79,7 @@ test("duplicate client message returns the existing persisted message", async ()
     });
     assert.equal(result.created, false);
     assert.equal(result.message, existing);
-    assert.equal(createCalled, false);
+    assert.equal(createCalled, true);
   } finally {
     Message.findOne = originalFind;
     Message.create = originalCreate;
@@ -88,8 +88,7 @@ test("duplicate client message returns the existing persisted message", async ()
 
 test("authenticated socket identity overrides sender fields in payload", async () => {
   const originals = {
-    userExists: User.exists,
-    userFindById: User.findById,
+    userFindOne: User.findOne,
     deviceExists: Device.exists,
     deviceFind: Device.find,
     conversationFind: Conversation.findOne,
@@ -102,8 +101,7 @@ test("authenticated socket identity overrides sender fields in payload", async (
   const senderUserId = new mongoose.Types.ObjectId();
   const payload = validPayload({ senderUserId: String(new mongoose.Types.ObjectId()), senderDeviceId: "forged-device" });
   let persisted;
-  User.exists = async () => true;
-  User.findById = () => ({ select: () => ({ lean: async () => ({ disappearingMessagesEnabled: false }) }) });
+  User.findOne = () => ({ select: () => ({ lean: async () => ({ disappearingMessagesEnabled: false }) }) });
   Device.exists = async () => true;
   Device.find = () => ({ select: () => ({ lean: async () => [{ userId: payload.envelopes[0].recipientUserId, deviceId: "recipient-device" }] }) });
   Conversation.findOne = () => ({ select: () => ({ lean: async () => ({ _id: payload.conversationId }) }) });
@@ -126,8 +124,7 @@ test("authenticated socket identity overrides sender fields in payload", async (
     assert.equal(String(persisted.senderUserId), String(senderUserId));
     assert.equal(persisted.senderDeviceId, "authenticated-device");
   } finally {
-    User.exists = originals.userExists;
-    User.findById = originals.userFindById;
+    User.findOne = originals.userFindOne;
     Device.exists = originals.deviceExists;
     Device.find = originals.deviceFind;
     Conversation.findOne = originals.conversationFind;

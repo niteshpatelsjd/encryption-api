@@ -15,6 +15,11 @@ function initializeMessaging(io, socket) {
         payload
       });
       if (result.success) {
+        if (typeof acknowledge === "function") {
+          const { deliveries: _deliveries, ...acknowledgement } = result;
+          acknowledge(acknowledgement);
+          acknowledge = null;
+        }
         result.deliveries.forEach(delivery => {
           io.to(deviceRoom(delivery.recipientUserId, delivery.recipientDeviceId))
             .emit(SocketEvents.MESSAGE_NEW, delivery.payload);

@@ -14,4 +14,5 @@ const schema = new mongoose.Schema({
 }, { timestamps: true, collection: "devices" });
 
 schema.index({ userId: 1, deviceId: 1 }, { unique: true });
+schema.index({ userId: 1, status: 1, deviceId: 1 });
 module.exports = mongoose.model("Device", schema);
