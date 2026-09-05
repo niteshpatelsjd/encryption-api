@@ -8,6 +8,7 @@ const securityRepo = require("../repositories/SecurityRepository");
 const buildResponse = require("../utils/response");
 const { hashActivationCode, randomToken } = require("../utils/security");
 const { ACTIVATION_CODE_TTL_HOURS } = require("../constants/SecurityConstants");
+const presence = require("../socket/PresenceService");
 
 async function createMobileUser(body) {
   const name = body?.name?.trim();
@@ -70,6 +71,18 @@ async function updateMobileUserStatus(body, context = {}) {
       DevicePrekey.deleteMany({ userId }),
       OneTimePrekey.deleteMany({ userId })
     ]);
+
+    // Account status is already persisted and authorization now fails closed.
+    // Notify and disconnect every exact user/device socket on a best-effort basis;
+    // offline clients are rejected by HTTP/refresh/socket authentication later.
+    const revokedAt = new Date().toISOString();
+    await Promise.allSettled(deviceIds.map(deviceId => presence.revokeDeviceConnections({
+      code: "DEVICE_REVOKED",
+      userId: String(userId),
+      deviceId,
+      reason: "ADMIN_REVOKED",
+      revokedAt
+    })));
 
     await securityRepo.logSecurityEvent({
       userId,

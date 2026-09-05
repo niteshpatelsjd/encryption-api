@@ -24,6 +24,9 @@ async function register(body, context = {}) {
   }
 
   const deviceId = body.deviceId.trim();
+  if (await require("../models/Device").exists({ userId: payload.userId, deviceId, status: "REVOKED" })) {
+    return buildResponse(401, "Use a new device identity to activate again", { code: "DEVICE_REVOKED" });
+  }
   const activeDevices = await securityRepo.findActiveDevices(payload.userId);
   const devicesToReplace = activeDevices.filter(item => item.deviceId !== deviceId);
   const activeDevice = devicesToReplace[0];
@@ -139,16 +142,8 @@ async function list({ requestedUserId, authenticatedUserId, isAdmin, pageIndex, 
   });
 }
 
-async function remove(userId, deviceId) {
-  const device = await securityRepo.revokeDevice(userId, deviceId);
-  if (!device) return buildResponse(404, "Device not found");
-  await Promise.all([
-    RefreshToken.updateMany({ userId, deviceId, revokedAt: null }, { $set: { revokedAt: new Date() } }),
-    DevicePrekey.deleteOne({ userId, deviceId }),
-    OneTimePrekey.deleteMany({ userId, deviceId }),
-    securityRepo.logSecurityEvent({ userId, deviceId, type: "DEVICE_REVOKED", outcome: "SUCCESS" })
-  ]);
-  return buildResponse(200, "Device revoked");
+async function remove(userId, deviceId, actor) {
+  return require("./DeviceRevocationService").revoke(userId, deviceId, actor);
 }
 
 module.exports = { register, list, remove };

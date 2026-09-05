@@ -7,7 +7,7 @@ const findActivation = codeHash => ActivationCode.findOne({ codeHash }).populate
 const findActivationById = id => ActivationCode.findById(id);
 const setActivationPending = id => ActivationCode.findOneAndUpdate({ _id: id, status: { $in: ["ACTIVE", "PENDING"] }, expiresAt: { $gt: new Date() } }, { $set: { status: "PENDING" } }, { new: true });
 const consumeActivation = (id, userId, deviceId) => ActivationCode.findOneAndUpdate({ _id: id, userId, status: "PENDING", expiresAt: { $gt: new Date() } }, { $set: { status: "USED", usedAt: new Date(), usedByDeviceId: deviceId } }, { new: true });
-const registerDevice = (userId, data) => Device.findOneAndUpdate({ userId, deviceId: data.deviceId }, { $set: { ...data, userId, status: "ACTIVE", revokedAt: null, lastSeenAt: new Date() } }, { upsert: true, new: true, runValidators: true });
+const registerDevice = (userId, data) => Device.findOneAndUpdate({ userId, deviceId: data.deviceId, status: { $ne: "REVOKED" } }, { $set: { ...data, userId, status: "ACTIVE", revokedAt: null, lastSeenAt: new Date() } }, { upsert: true, new: true, runValidators: true });
 const listDevices = (query, skip, limit) => Device.find(query)
   .select("-identityKey")
   .sort({ createdAt: -1 })

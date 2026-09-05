@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const redis = require("../config/RedisConfig");
 const Device = require("../models/Device");
+const ConversationMember = require("../models/ConversationMember");
 const SocketEvents = require("../constants/SocketEvents");
 
 const MAX_SUBSCRIPTIONS = 100;
@@ -9,6 +10,17 @@ const localLastSeen = new Map();
 let presenceServer = null;
 
 function setPresenceServer(io) { presenceServer = io; }
+
+async function revokeDeviceConnections(payload) {
+  if (!presenceServer) return;
+  const sockets = await presenceServer.in(`user:${payload.userId}`).fetchSockets();
+  const targets = sockets.filter(socket => String(socket.data.userId) === String(payload.userId)
+    && String(socket.data.deviceId) === String(payload.deviceId));
+  targets.forEach(socket => socket.emit(SocketEvents.DEVICE_REVOKED, payload));
+  // Best effort flush, not a guarantee of delivery (offline clients use HTTP errors).
+  if (targets.length) await new Promise(resolve => setTimeout(resolve, 100));
+  targets.forEach(socket => socket.disconnect(true));
+}
 
 async function disconnectDevice(userId, deviceId, sessionRevokedPayload = null) {
   if (!presenceServer) return;
@@ -98,6 +110,13 @@ function initializePresence(io, socket) {
     try {
       const userIds = normalizeUserIds(payload);
       if (!userIds) throw new Error("userIds must be an array");
+      const ownMemberships = await ConversationMember.find({ userId, status: 1 }).select("conversationId").lean();
+      const permitted = await ConversationMember.find({
+        conversationId: { $in: ownMemberships.map(member => member.conversationId) },
+        userId: { $in: userIds }, status: 1
+      }).select("userId").lean();
+      const allowed = new Set([String(userId), ...permitted.map(member => String(member.userId))]);
+      if (userIds.some(id => !allowed.has(id))) throw new Error("Subscription not permitted");
       await Promise.all(userIds.map(id => socket.join(presenceRoom(id))));
       const presences = await Promise.all(userIds.map(getPresence));
       presences.forEach(presence => socket.emit(SocketEvents.PRESENCE_UPDATE, presence));
@@ -155,4 +174,4 @@ function initializePresence(io, socket) {
   });
 }
 
-module.exports = { initializePresence, getPresence, setPresenceServer, disconnectDevice };
+module.exports = { initializePresence, getPresence, setPresenceServer, disconnectDevice, revokeDeviceConnections };

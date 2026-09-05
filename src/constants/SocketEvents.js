@@ -1,4 +1,5 @@
 module.exports = Object.freeze({
+  DEVICE_REVOKED: "device:revoked",
   USER_ONLINE: "USER_ONLINE",
   USER_OFFLINE: "USER_OFFLINE",
   PRESENCE_UPDATE: "PRESENCE_UPDATE",

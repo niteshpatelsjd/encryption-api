@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const RefreshToken = require("../models/RefreshToken");
 const Device = require("../models/Device");
 const User = require("../models/User");
+const access = require("./MobileAccessService");
 const { hash, randomToken } = require("../utils/security");
 const { ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS } = require("../constants/SecurityConstants");
 
@@ -16,9 +17,16 @@ function createAccessToken(userId, deviceId) {
 }
 
 async function createRefreshToken(userId, deviceId) {
+  await access.assertActive(userId, deviceId);
   const token = randomToken(48);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 86400000);
   await RefreshToken.create({ tokenHash: hash(token), userId, deviceId, expiresAt });
+  try {
+    await access.assertActive(userId, deviceId);
+  } catch (error) {
+    await RefreshToken.updateMany({ userId, deviceId, revokedAt: null }, { $set: { revokedAt: new Date() } });
+    throw error;
+  }
   return { token, expiresAt };
 }
 
@@ -29,6 +37,11 @@ async function issueTokenPair(userId, deviceId) {
 
 async function rotate(refreshToken) {
   const tokenHash = hash(refreshToken || "");
+  // Keep revoked token records: their identity lets offline devices receive the
+  // stable DEVICE_REVOKED code instead of an ambiguous invalid-token response.
+  const identity = await RefreshToken.findOne({ tokenHash });
+  if (!identity) return null;
+  await access.assertActive(identity.userId, identity.deviceId);
   const record = await RefreshToken.findOneAndUpdate(
     { tokenHash, revokedAt: null, expiresAt: { $gt: new Date() } },
     { $set: { revokedAt: new Date() } },

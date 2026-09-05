@@ -157,14 +157,22 @@ router.post("/auth/logout", controller.logout);
  *   delete:
  *     tags: [Mobile User Device Controller]
  *     summary: Revoke a device
+ *     description: Admins must supply userId. Mobile callers may revoke only their own device records. Safe to retry after partial cleanup.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
+ *       - in: query
+ *         name: userId
+ *         description: Required for admins; mobile callers may specify only their own userId.
+ *         schema: { type: string }
  *       - in: path
  *         name: deviceId
  *         required: true
  *         schema: { type: string }
  *     responses:
  *       200: { description: Device revoked }
+ *       401: { description: Invalid authentication or DEVICE_REVOKED }
+ *       403: { description: DEVICE_OWNERSHIP_REQUIRED }
+ *       503: { description: REVOCATION_CLEANUP_PENDING - retry the same request }
  */
 router.post("/devices/register", rejectSensitive, controller.registerDevice);
 router.get("/devices", deviceListAuth, controller.listDevices);

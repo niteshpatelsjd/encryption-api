@@ -26,6 +26,7 @@ test.afterEach(() => {
 test.after(() => redis.disconnect());
 
 function stubRegistrationDependencies() {
+  replace(require("../src/models/Device"), "exists", async () => null);
   replace(activationService, "verifyActivationToken", () => ({ activationId: "activation-1", userId: "user-1" }));
   replace(securityRepo, "findActivationById", async () => ({ userId: { toString: () => "user-1" }, status: "PENDING", expiresAt: new Date(Date.now() + 60_000) }));
   replace(securityRepo, "findActiveDevices", async () => [{ deviceId: "device-a", deviceType: "ANDROID", deviceName: "Pixel 8", lastSeenAt: new Date(), createdAt: new Date() }]);

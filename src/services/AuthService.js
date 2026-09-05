@@ -6,8 +6,12 @@ const RefreshToken = require("../models/RefreshToken");
 
 async function refresh(body) {
   if (!body?.refreshToken) return buildResponse(400, "refreshToken is required");
-  const tokens = await tokenService.rotate(body.refreshToken);
-  return tokens ? buildResponse(200, "Tokens refreshed", tokens) : buildResponse(401, "Invalid or expired refresh token");
+  try {
+    const tokens = await tokenService.rotate(body.refreshToken);
+    return tokens ? buildResponse(200, "Tokens refreshed", tokens) : buildResponse(401, "Invalid or expired refresh token", { code: "INVALID_REFRESH_TOKEN" });
+  } catch (error) {
+    return require("./MobileAccessService").response(error);
+  }
 }
 
 async function logout(body) {

@@ -216,6 +216,8 @@ async function loginAdmin(data) {
     const userWithRole = await buildUserRoleResponse(user);
         
     const token = jwtUtil.generate({
+      purpose: "ADMIN_ACCESS",
+      adminUserId: String(user._id),
       email: user.email,
     });
     // 5️⃣ Return success response
@@ -430,6 +432,8 @@ async function verifyOtp(countryCode, mobileNumber, otp, deviceType, deviceToken
     
     // 3️⃣ If OTP valid & user found → generate JWT token
     const token = jwtUtil.generate({
+      purpose: "ADMIN_ACCESS",
+      adminUserId: String(user._id),
       countryCode: user.countryCode,
       mobileNumber: user.mobileNumber,
     });

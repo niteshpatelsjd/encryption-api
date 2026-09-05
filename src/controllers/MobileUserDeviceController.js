@@ -46,13 +46,16 @@ module.exports = {
     status: req.query.status
   })),
   removeDevice: handle(req => {
+    if (!req.admin && req.query.userId && String(req.query.userId) !== String(req.user?.userId)) {
+      return buildResponse(403, "You can only revoke your own devices", { code: "DEVICE_OWNERSHIP_REQUIRED" });
+    }
     const userId = req.admin ? req.query.userId : req.user?.userId;
     if (!userId) {
       const error = new Error("userId is required for admin device revocation");
       error.statusCode = 400;
       throw error;
     }
-    return deviceService.remove(userId, req.params.deviceId);
+    return deviceService.remove(userId, req.params.deviceId, { adminUserId: req.admin?.userId, ip: req.ip });
   }),
   uploadPrekeys: handle(req => prekeyService.upload(req.user.userId, req.body)),
   getPrekeyBundle: handle(req => prekeyService.bundle(req.params.userId, {
