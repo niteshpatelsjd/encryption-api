@@ -1,10 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const notificationController = require("../controllers/NotificationController");
+const mobileNotificationController = require("../controllers/MobileNotificationController");
+const auth = require("../middleware/auth");
+const adminAuth = require("../middleware/adminAuth");
 const multer = require("multer");
 // Multer setup (memory storage so we can pass buffer to fileUtil)
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
+
+router.get("/me", auth, mobileNotificationController.list);
+router.patch("/read-all", auth, mobileNotificationController.markAllRead);
+router.patch("/:id/read", auth, mobileNotificationController.markRead);
+router.delete("/:id", auth, mobileNotificationController.remove);
 /**
  * @openapi
  * tags:
@@ -90,6 +98,7 @@ router.post(
       maxCount: 1
     }
   ]),
+  adminAuth,
   notificationController.createNotification
 );
 
@@ -116,7 +125,7 @@ router.post(
  *       200:
  *         description: Notification marked as read
  */
-router.post("/markRead", notificationController.markRead);
+router.post("/markRead", adminAuth, notificationController.markRead);
 
 /**
  * @openapi
@@ -139,7 +148,7 @@ router.post("/markRead", notificationController.markRead);
  *       200:
  *         description: All notifications marked as read
  */
-router.post("/markAllRead", notificationController.markAllRead);
+router.post("/markAllRead", adminAuth, notificationController.markAllRead);
 
 /**
  * @openapi
@@ -159,7 +168,7 @@ router.post("/markAllRead", notificationController.markAllRead);
  *       200:
  *         description: Notification details
  */
-router.get("/getById", notificationController.getById);
+router.get("/getById", adminAuth, notificationController.getById);
 
 /**
  * @openapi
@@ -201,7 +210,7 @@ router.get("/getById", notificationController.getById);
  *       200:
  *         description: Notification list
  */
-router.get("/getAll", notificationController.getAll);
+router.get("/getAll", adminAuth, notificationController.getAll);
 
 /**
  * @openapi
@@ -235,7 +244,7 @@ router.get("/getAll", notificationController.getAll);
  *       200:
  *         description: Notification list with organization details
  */
-router.get("/getAllNotification", notificationController.getAllNotification);
+router.get("/getAllNotification", adminAuth, notificationController.getAllNotification);
 
 /**
  * @openapi
@@ -249,7 +258,7 @@ router.get("/getAllNotification", notificationController.getAllNotification);
  *       200:
  *         description: Event type list
  */
-router.get("/getAllEvents", notificationController.getAllEvents);
+router.get("/getAllEvents", adminAuth, notificationController.getAllEvents);
 
 /**
  * @openapi
@@ -269,6 +278,6 @@ router.get("/getAllEvents", notificationController.getAllEvents);
  *       200:
  *         description: Upcoming event notifications
  */
-router.get("/getUpcomingEvents", notificationController.getUpcomingEvents);
+router.get("/getUpcomingEvents", adminAuth, notificationController.getUpcomingEvents);
 
 module.exports = router;

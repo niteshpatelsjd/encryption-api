@@ -24,6 +24,8 @@ function initializeMessaging(io, socket) {
           io.to(deviceRoom(delivery.recipientUserId, delivery.recipientDeviceId))
             .emit(SocketEvents.MESSAGE_NEW, delivery.payload);
         });
+        void require("../services/EncryptedMessagePushService").notify(result.deliveries)
+          .catch(error => logger.warn("Encrypted message push deferred", { error: error.message }));
       }
     } catch (error) {
       logger.error("Encrypted message processing failed", {

@@ -62,7 +62,7 @@ async function updateMobileUserStatus(body, context = {}) {
     await Promise.all([
       Device.updateMany(
         { userId, status: "ACTIVE" },
-        { $set: { status: "REVOKED", revokedAt: new Date() } }
+        { $set: { status: "REVOKED", revokedAt: new Date() }, $unset: { pushToken: 1, pushPlatform: 1, pushTokenUpdatedAt: 1 } }
       ),
       RefreshToken.updateMany(
         { userId, revokedAt: null },

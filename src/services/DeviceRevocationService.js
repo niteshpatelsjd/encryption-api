@@ -15,7 +15,7 @@ async function revoke(userId, deviceId, actor = {}) {
   // even if cleanup fails. Retry reruns cleanup; it never reactivates the device.
   let device = await Device.findOneAndUpdate(
     { userId, deviceId, status: "ACTIVE" },
-    { $set: { status: "REVOKED", revokedAt: new Date() } },
+    { $set: { status: "REVOKED", revokedAt: new Date() }, $unset: { pushToken: 1, pushPlatform: 1, pushTokenUpdatedAt: 1 } },
     { new: true, writeConcern: { w: "majority" } }
   );
   const alreadyRevoked = !device;

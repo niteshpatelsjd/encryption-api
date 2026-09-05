@@ -44,6 +44,7 @@ async function sendNotification({
             },
 
             data: stringifyData(data)
+            ,android: { priority: "high", notification: { channelId: "default", sound: "default" } }
 
         });
 
@@ -76,6 +77,7 @@ async function sendNotification({
             sentStatus: "FAILED",
 
             failureReason: error.message,
+            errorCode: error.code || null,
 
             firebaseMessageId: null
 

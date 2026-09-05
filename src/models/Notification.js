@@ -8,6 +8,16 @@ const NotificationSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    deviceId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    dedupeKey: {
+      type: String,
+      default: null,
+      select: false,
+    },
     organizationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "organizations",
@@ -27,7 +37,7 @@ const NotificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["SYSTEM", "GENERAL", "EVENT", "ANNOUNCEMENT", "ALERT"],
+      enum: ["SYSTEM", "GENERAL", "EVENT", "ANNOUNCEMENT", "ALERT", "NEW_MESSAGE"],
       default: "GENERAL",
     },
     data: {
@@ -91,5 +101,7 @@ NotificationSchema.index({
   status: 1,
   createdAt: -1,
 });
+
+NotificationSchema.index({ dedupeKey: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("notification", NotificationSchema);

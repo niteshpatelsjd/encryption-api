@@ -57,6 +57,8 @@ module.exports = {
     }
     return deviceService.remove(userId, req.params.deviceId, { adminUserId: req.admin?.userId, ip: req.ip });
   }),
+  registerPushToken: handle(req => deviceService.setPushToken(req.user.userId, req.user.deviceId, req.body)),
+  removePushToken: handle(req => deviceService.clearPushToken(req.user.userId, req.user.deviceId)),
   uploadPrekeys: handle(req => prekeyService.upload(req.user.userId, req.body)),
   getPrekeyBundle: handle(req => prekeyService.bundle(req.params.userId, {
     userId: req.user.userId,

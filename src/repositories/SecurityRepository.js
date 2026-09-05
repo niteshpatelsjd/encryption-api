@@ -22,7 +22,7 @@ const findActiveDevices = userId => Device.find({ userId, status: "ACTIVE" })
   .lean();
 const revokeOtherDevices = (userId, deviceId) => Device.updateMany(
   { userId, deviceId: { $ne: deviceId }, status: "ACTIVE" },
-  { $set: { status: "REVOKED", revokedAt: new Date() } }
+  { $set: { status: "REVOKED", revokedAt: new Date() }, $unset: { pushToken: 1, pushPlatform: 1, pushTokenUpdatedAt: 1 } }
 );
 const findActiveDevice = (userId, deviceId) => Device.findOne({ userId, deviceId, status: "ACTIVE" });
 const logSecurityEvent = data => SecurityEvent.create(data).catch(() => null);

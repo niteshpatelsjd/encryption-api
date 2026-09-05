@@ -11,6 +11,9 @@ const schema = new mongoose.Schema({
   status: { type: String, enum: ["ACTIVE", "REVOKED"], default: "ACTIVE", index: true },
   lastSeenAt: { type: Date, default: Date.now },
   revokedAt: { type: Date, default: null }
+  ,pushToken: { type: String, default: null, select: false }
+  ,pushPlatform: { type: String, enum: ["FCM", null], default: null }
+  ,pushTokenUpdatedAt: { type: Date, default: null }
 }, { timestamps: true, collection: "devices" });
 
 schema.index({ userId: 1, deviceId: 1 }, { unique: true });

@@ -23,7 +23,7 @@ async function logout(body) {
     // never clear the active-device pointer of a replacement device.
     await Device.updateOne(
       { userId, deviceId, status: "ACTIVE" },
-      { $set: { status: "REVOKED", revokedAt: new Date() } }
+      { $set: { status: "REVOKED", revokedAt: new Date() }, $unset: { pushToken: 1, pushPlatform: 1, pushTokenUpdatedAt: 1 } }
     );
     await Promise.all([
       RefreshToken.updateMany(

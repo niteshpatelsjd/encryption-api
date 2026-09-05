@@ -146,4 +146,26 @@ async function remove(userId, deviceId, actor) {
   return require("./DeviceRevocationService").revoke(userId, deviceId, actor);
 }
 
-module.exports = { register, list, remove };
+async function setPushToken(userId, deviceId, body) {
+  const pushToken = typeof body?.pushToken === "string" ? body.pushToken.trim() : "";
+  if (!pushToken || pushToken.length > 4096 || body?.platform !== "FCM") {
+    return buildResponse(400, "Valid FCM push token is required", { code: "INVALID_PUSH_TOKEN" });
+  }
+  const updated = await require("../models/Device").updateOne(
+    { userId, deviceId, status: "ACTIVE" },
+    { $set: { pushToken, pushPlatform: "FCM", pushTokenUpdatedAt: new Date() } }
+  );
+  return updated.matchedCount
+    ? buildResponse(200, "Push token registered", null)
+    : buildResponse(401, "Device is not active", { code: "DEVICE_REVOKED" });
+}
+
+async function clearPushToken(userId, deviceId) {
+  await require("../models/Device").updateOne(
+    { userId, deviceId },
+    { $unset: { pushToken: 1, pushPlatform: 1, pushTokenUpdatedAt: 1 } }
+  );
+  return buildResponse(200, "Push token removed", null);
+}
+
+module.exports = { register, list, remove, setPushToken, clearPushToken };

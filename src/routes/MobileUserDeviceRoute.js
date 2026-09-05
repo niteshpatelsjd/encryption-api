@@ -176,6 +176,8 @@ router.post("/auth/logout", controller.logout);
  */
 router.post("/devices/register", rejectSensitive, controller.registerDevice);
 router.get("/devices", deviceListAuth, controller.listDevices);
+router.put("/devices/push-token", auth, controller.registerPushToken);
+router.delete("/devices/push-token", auth, controller.removePushToken);
 router.delete("/devices/:deviceId", deviceListAuth, controller.removeDevice);
 
 /**
