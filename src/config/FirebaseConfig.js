@@ -25,7 +25,9 @@ function getFirebaseApp() {
             app = initializeApp();
         }
 
-        logger.info("Firebase initialized successfully");
+        logger.info("Firebase initialized successfully", {
+            projectId: serviceAccount?.projectId || process.env.GOOGLE_CLOUD_PROJECT || null
+        });
 
         return app;
 
@@ -49,13 +51,6 @@ function messaging() {
 
 function getServiceAccount() {
 
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-
-        return JSON.parse(
-            process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-        );
-    }
-
     if (
         process.env.FIREBASE_PROJECT_ID &&
         process.env.FIREBASE_CLIENT_EMAIL &&
@@ -69,9 +64,15 @@ function getServiceAccount() {
         };
     }
 
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+
+        return JSON.parse(
+            process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+        );
+    }
+
     return null;
 }
-
 module.exports = {
     getMessaging: messaging
 };
