@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const mongoose = require("mongoose");
-const { AccessToken } = require("livekit-server-sdk");
+const { AccessToken, TrackSource } = require("livekit-server-sdk");
 const CallSession = require("../models/CallSession");
 const ConversationMember = require("../models/ConversationMember");
 const User = require("../models/User");
@@ -30,7 +30,9 @@ async function participantToken(call, userId, deviceId, name) {
     canPublish: true,
     canSubscribe: true,
     canPublishData: false,
-    canPublishSources: call.mode === "video" ? ["microphone", "camera"] : ["microphone"]
+    canPublishSources: call.mode === "video"
+      ? [TrackSource.MICROPHONE, TrackSource.CAMERA]
+      : [TrackSource.MICROPHONE]
   });
   const clientUrl = url.replace(/^https:/i, "wss:").replace(/^http:/i, "ws:");
   return { token: await token.toJwt(), serverUrl: clientUrl };
