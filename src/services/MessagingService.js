@@ -21,13 +21,14 @@ const failure = (clientMessageId, errorCode = ErrorCodes.INVALID_MESSAGE) => ({
 });
 
 async function authorize(senderUserId, senderDeviceId, message) {
-  const [activeUser, activeDevice, conversation, senderMember] = await Promise.all([
+  // MobileSocketAccess verifies the user, device and refresh session immediately
+  // before every protected event. Do not repeat the same device query here.
+  const [activeUser, conversation, senderMember] = await Promise.all([
     User.findOne({ _id: senderUserId, status: 1 }).select("disappearingMessagesEnabled").lean(),
-    Device.exists({ userId: senderUserId, deviceId: senderDeviceId, status: "ACTIVE" }),
     Conversation.findOne({ _id: message.conversationId, status: 1 }).select("_id").lean(),
     ConversationMember.exists({ conversationId: message.conversationId, userId: senderUserId, status: 1 })
   ]);
-  if (!activeUser || !activeDevice) return { errorCode: ErrorCodes.DEVICE_REVOKED };
+  if (!activeUser) return { errorCode: ErrorCodes.DEVICE_REVOKED };
   if (!conversation || !senderMember) return { errorCode: ErrorCodes.UNAUTHORIZED_MESSAGE_ACCESS };
 
   const recipientUserIds = [...new Set(message.envelopes.map(envelope => envelope.recipientUserId))];

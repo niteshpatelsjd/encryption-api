@@ -10,7 +10,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: "https://encryption-api-b67f.onrender.com", // change in prod
+        url: "https://api.highestencryptionphone.com", // change in prod
         description: "API server",
       },
        {

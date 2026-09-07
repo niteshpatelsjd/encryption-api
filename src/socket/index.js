@@ -5,7 +5,18 @@ const { initializeTyping } = require("./TypingSocket");
 const { authenticate, protectEvents } = require("./MobileSocketAccess");
 
 module.exports = function initializeSocket(httpServer) {
-  const io = new Server(httpServer, { cors: { origin: process.env.SOCKET_CORS_ORIGIN || "*" } });
+  const io = new Server(httpServer, {
+    cors: { origin: process.env.SOCKET_CORS_ORIGIN || "*" },
+    transports: ["websocket", "polling"],
+    perMessageDeflate: false,
+    pingInterval: 20000,
+    pingTimeout: 20000,
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2 * 60 * 1000,
+      // Authentication and active-device checks must also run after recovery.
+      skipMiddlewares: false
+    }
+  });
   setPresenceServer(io);
   io.use(authenticate);
   io.on("connection", socket => {
