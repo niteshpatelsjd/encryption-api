@@ -23,6 +23,7 @@ const MessageSchema = new mongoose.Schema({
   messageType: { type: String, enum: ["TEXT"], required: true },
   encryptionVersion: { type: String, enum: ["SIGNAL_V1"], required: true },
   action: { type: MessageActionSchema, default: null },
+  attachmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Attachment", default: null },
   envelopes: {
     type: [EnvelopeSchema],
     required: true,

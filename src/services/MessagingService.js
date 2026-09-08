@@ -1,6 +1,7 @@
 const Conversation = require("../models/Conversation");
 const ConversationMember = require("../models/ConversationMember");
 const Device = require("../models/Device");
+const Attachment = require("../models/Attachment");
 const User = require("../models/User");
 const messageRepo = require("../repositories/MessageRepository");
 const { validateMessage } = require("../validators/MessageValidator");

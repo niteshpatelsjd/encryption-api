@@ -2,7 +2,8 @@ const {
     S3Client,
     PutObjectCommand,
     DeleteObjectCommand,
-    GetObjectCommand
+    GetObjectCommand,
+    HeadObjectCommand
 } = require("@aws-sdk/client-s3");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
@@ -127,8 +128,13 @@ async function getPreSignedUrl(fileKey, expiresIn = 3600) {
 
 }
 
-module.exports = {
-    uploadFile,
-    deleteFile,
-    getPreSignedUrl
-};
+async function getPreSignedUploadUrl(fileKey, contentType = "application/octet-stream", expiresIn = 900) {
+    return getSignedUrl(s3Client, new PutObjectCommand({ Bucket: process.env.AWS_S3_BUCKET, Key: fileKey, ContentType: contentType }), { expiresIn });
+}
+
+async function headFile(fileKey) {
+    try { return await s3Client.send(new HeadObjectCommand({ Bucket: process.env.AWS_S3_BUCKET, Key: fileKey })); }
+    catch (error) { if (error?.name === "NotFound" || error?.$metadata?.httpStatusCode === 404) return null; throw error; }
+}
+
+module.exports = { uploadFile, deleteFile, getPreSignedUrl, getPreSignedUploadUrl, headFile };

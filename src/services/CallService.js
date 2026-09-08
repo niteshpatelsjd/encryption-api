@@ -109,14 +109,27 @@ async function end(userId, callId) {
   });
 }
 
-async function list(userId) {
-  const calls = await CallSession.find({ participantUserIds: userId })
-    .sort({ createdAt: -1 }).limit(50).lean();
+async function list(userId, options = {}) {
+  const paginated = options.paginated === true;
+  const requestedLimit = Number.parseInt(options.limit, 10);
+  const limit = paginated && Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), 50)
+    : 50;
+  const query = { participantUserIds: userId };
+  if (paginated && options.cursor) {
+    if (!mongoose.isValidObjectId(options.cursor)) return buildResponse(400, "Invalid cursor");
+    query._id = { $lt: new mongoose.Types.ObjectId(options.cursor) };
+  }
+
+  const rows = await CallSession.find(query)
+    .sort({ _id: -1 }).limit(paginated ? limit + 1 : limit).lean();
+  const hasMore = paginated && rows.length > limit;
+  const calls = hasMore ? rows.slice(0, limit) : rows;
   const peerIds = [...new Set(calls.flatMap(call => call.participantUserIds.map(String)))]
     .filter(id => id !== String(userId));
   const users = await User.find({ _id: { $in: peerIds } }).select("name profileImageKey profileUrl").lean();
   const usersById = new Map(users.map(user => [String(user._id), user]));
-  return buildResponse(200, "Call history fetched", await Promise.all(calls.map(async call => {
+  const content = await Promise.all(calls.map(async call => {
     const peerUserId = call.participantUserIds.map(String).find(id => id !== String(userId)) || "";
     const peer = usersById.get(peerUserId);
     return {
@@ -129,7 +142,14 @@ async function list(userId) {
         ? Math.max(0, Math.floor((new Date(call.endedAt).getTime() - new Date(call.answeredAt).getTime()) / 1000))
         : null
     };
-  })));
+  }));
+
+  if (!paginated) return buildResponse(200, "Call history fetched", content);
+  return buildResponse(200, "Call history fetched", {
+    content,
+    nextCursor: hasMore && calls.length ? String(calls[calls.length - 1]._id) : null,
+    hasMore
+  });
 }
 
 module.exports = { start, respond, end, list };

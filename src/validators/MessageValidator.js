@@ -12,6 +12,8 @@ function validateMessage(payload) {
   if (!mongoose.Types.ObjectId.isValid(payload.conversationId)) return invalid();
   if (payload.messageType !== MESSAGE_TYPE_TEXT) return invalid();
   if (payload.encryptionVersion !== ENCRYPTION_VERSION_SIGNAL_V1) return invalid();
+  const attachmentId = payload.attachmentId === undefined || payload.attachmentId === null ? null : String(payload.attachmentId);
+  if (attachmentId && !mongoose.Types.ObjectId.isValid(attachmentId)) return invalid();
   let action = null;
   if (payload.action !== undefined) {
     if (!payload.action || typeof payload.action !== "object" || Array.isArray(payload.action)) return invalid();
@@ -49,7 +51,8 @@ function validateMessage(payload) {
       ciphertextType: envelope.ciphertextType
     })),
     clientCreatedAt,
-    action
+    action,
+    attachmentId
   } };
 }
 

@@ -16,6 +16,7 @@ const conversationRoutes = require("./routes/ConversationRoute");
 const messageRoutes = require("./routes/MessageRoute");
 const userSearchRoutes = require("./routes/UserSearchRoute");
 const callRoutes = require("./routes/CallRoute");
+const attachmentRoutes = require("./routes/AttachmentRoute");
 const initializeSocket = require("./socket");
 
 const swaggerSpec = require("./config/SwaggerConfig"); // 👈 import swagger config
@@ -46,6 +47,7 @@ app.use("/api/v1/conversations", conversationRoutes);
 app.use("/api/v1/messages", messageRoutes);
 app.use("/api/v1/users", userSearchRoutes);
 app.use("/api/v1/calls", callRoutes);
+app.use("/api/v1/attachments", attachmentRoutes);
 
 
 // ✅ App Content routes

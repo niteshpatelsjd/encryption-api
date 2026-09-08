@@ -61,7 +61,7 @@ async function end(req, res) {
 
 async function list(req, res) {
   try {
-    const result = await callService.list(req.user.userId);
+    const result = await callService.list(req.user.userId, { cursor: req.query.cursor, limit: req.query.limit, paginated: req.query.paginated === "true" });
     return res.status(result.responseCode).json(result);
   } catch (error) {
     logger.error("List calls failed", { userId: req.user?.userId, error: error.message });
