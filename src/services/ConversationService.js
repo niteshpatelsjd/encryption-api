@@ -34,6 +34,7 @@ async function buildParticipantResponse(user) {
   return {
     id: user._id,
     name: user.name || "",
+    disappearingMessagesEnabled: user.disappearingMessagesEnabled === true,
     profileUrl: user.profileImageKey
       ? await s3Util.getPreSignedUrl(user.profileImageKey)
       : ""

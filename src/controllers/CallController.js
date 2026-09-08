@@ -19,13 +19,14 @@ async function start(req, res) {
         conversationId: result.responseBody.conversationId,
         callerUserId: String(req.user.userId),
         callerName: result.callerName,
+        callerProfileUrl: result.callerProfileUrl || null,
         mode: result.responseBody.mode
       };
       notify(req, result.notifyUserIds, SocketEvents.CALL_INVITE, invite);
       void callPush.notify(result.notifyUserIds, invite).catch(error =>
         logger.warn("Call push dispatch failed", { callId: invite.callId, error: error.message }));
     }
-    delete result.notifyUserIds; delete result.callerName;
+    delete result.notifyUserIds; delete result.callerName; delete result.callerProfileUrl;
     return res.status(result.responseCode).json(result);
   } catch (error) {
     logger.error("Start call failed", { userId: req.user?.userId, error: error.message });

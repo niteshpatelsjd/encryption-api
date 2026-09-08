@@ -5,8 +5,14 @@ const CallSession = require("../models/CallSession");
 const ConversationMember = require("../models/ConversationMember");
 const User = require("../models/User");
 const buildResponse = require("../utils/response");
+const s3Util = require("../utils/s3Util");
 
 const activeStatuses = ["RINGING", "ACTIVE"];
+
+async function userProfileUrl(user) {
+  if (user?.profileImageKey) return s3Util.getPreSignedUrl(user.profileImageKey);
+  return user?.profileUrl || null;
+}
 
 function liveKitConfig() {
   const url = process.env.LIVEKIT_URL?.trim().replace(/\/$/, "");
@@ -63,12 +69,12 @@ async function start(userId, deviceId, body) {
     status: "RINGING",
     startedAt: new Date()
   });
-  const caller = await User.findById(userId).select("name").lean();
+  const caller = await User.findById(userId).select("name profileImageKey profileUrl").lean();
   const credentials = await participantToken(call, userId, deviceId, caller?.name);
   return Object.assign(buildResponse(201, "Call started", {
     callId: String(call._id), conversationId: String(call.conversationId), roomName: call.livekitRoomName,
     mode: call.mode, ...credentials
-  }), { notifyUserIds: [String(recipientUserId)], callerName: caller?.name || "Encryption App user" });
+  }), { notifyUserIds: [String(recipientUserId)], callerName: caller?.name || "Encryption App user", callerProfileUrl: await userProfileUrl(caller) });
 }
 
 async function respond(userId, deviceId, callId, body) {
@@ -108,14 +114,14 @@ async function list(userId) {
     .sort({ createdAt: -1 }).limit(50).lean();
   const peerIds = [...new Set(calls.flatMap(call => call.participantUserIds.map(String)))]
     .filter(id => id !== String(userId));
-  const users = await User.find({ _id: { $in: peerIds } }).select("name profileUrl").lean();
+  const users = await User.find({ _id: { $in: peerIds } }).select("name profileImageKey profileUrl").lean();
   const usersById = new Map(users.map(user => [String(user._id), user]));
-  return buildResponse(200, "Call history fetched", calls.map(call => {
+  return buildResponse(200, "Call history fetched", await Promise.all(calls.map(async call => {
     const peerUserId = call.participantUserIds.map(String).find(id => id !== String(userId)) || "";
     const peer = usersById.get(peerUserId);
     return {
       callId: String(call._id), conversationId: String(call.conversationId), peerUserId,
-      peerName: peer?.name || "Encryption App user", peerProfileUrl: peer?.profileUrl || null,
+      peerName: peer?.name || "Encryption App user", peerProfileUrl: await userProfileUrl(peer),
       mode: call.mode, direction: String(call.initiatorUserId) === String(userId) ? "outgoing" : "incoming",
       status: call.status, startedAt: call.startedAt || call.createdAt, answeredAt: call.answeredAt || null,
       endedAt: call.endedAt || null,
@@ -123,7 +129,7 @@ async function list(userId) {
         ? Math.max(0, Math.floor((new Date(call.endedAt).getTime() - new Date(call.answeredAt).getTime()) / 1000))
         : null
     };
-  }));
+  })));
 }
 
 module.exports = { start, respond, end, list };

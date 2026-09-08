@@ -8,7 +8,7 @@ const { TYPE_DIRECT, STATUS_ACTIVE } = require("../constants/ConversationConstan
 
 const participantPopulation = {
   path: "participantIds",
-  select: "name profileImageKey status"
+  select: "name profileImageKey status disappearingMessagesEnabled"
 };
 
 async function ensureMembers(conversationId, participantIds) {

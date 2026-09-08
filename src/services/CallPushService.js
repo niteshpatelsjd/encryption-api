@@ -7,7 +7,7 @@ const invalidTokenCodes = new Set([
   "messaging/invalid-registration-token"
 ]);
 
-async function notify(recipientUserIds, { callId, conversationId, callerUserId, callerName, mode }) {
+async function notify(recipientUserIds, { callId, conversationId, callerUserId, callerName, callerProfileUrl, mode }) {
   if (!Array.isArray(recipientUserIds) || !recipientUserIds.length) return;
   const devices = await Device.find({
     userId: { $in: recipientUserIds },
@@ -25,6 +25,7 @@ async function notify(recipientUserIds, { callId, conversationId, callerUserId, 
         conversationId: String(conversationId),
         callerUserId: String(callerUserId),
         callerName: callerName || "Encryption App user",
+        callerProfileUrl: callerProfileUrl || "",
         mode
       },
       androidChannelId: "calls",
