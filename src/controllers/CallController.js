@@ -2,6 +2,7 @@ const callService = require("../services/CallService");
 const SocketEvents = require("../constants/SocketEvents");
 const buildResponse = require("../utils/response");
 const logger = require("../utils/logger");
+const callPush = require("../services/CallPushService");
 
 function notify(req, userIds, event, payload) {
   const io = req.app.get("io");
@@ -12,10 +13,18 @@ function notify(req, userIds, event, payload) {
 async function start(req, res) {
   try {
     const result = await callService.start(req.user.userId, req.user.deviceId, req.body);
-    if (result.responseCode === 201) notify(req, result.notifyUserIds, SocketEvents.CALL_INVITE, {
-      callId: result.responseBody.callId, conversationId: result.responseBody.conversationId,
-      callerUserId: String(req.user.userId), callerName: result.callerName, mode: result.responseBody.mode
-    });
+    if (result.responseCode === 201) {
+      const invite = {
+        callId: result.responseBody.callId,
+        conversationId: result.responseBody.conversationId,
+        callerUserId: String(req.user.userId),
+        callerName: result.callerName,
+        mode: result.responseBody.mode
+      };
+      notify(req, result.notifyUserIds, SocketEvents.CALL_INVITE, invite);
+      void callPush.notify(result.notifyUserIds, invite).catch(error =>
+        logger.warn("Call push dispatch failed", { callId: invite.callId, error: error.message }));
+    }
     delete result.notifyUserIds; delete result.callerName;
     return res.status(result.responseCode).json(result);
   } catch (error) {

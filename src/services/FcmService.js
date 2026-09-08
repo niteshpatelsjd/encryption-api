@@ -6,7 +6,9 @@ async function sendNotification({
     title,
     message,
     data,
-    imageUrl
+    imageUrl,
+    androidChannelId = "default",
+    apnsCategory
 }) {
 
     if (!token) {
@@ -44,7 +46,11 @@ async function sendNotification({
             },
 
             data: stringifyData(data)
-            ,android: { priority: "high", notification: { channelId: "default", sound: "default" } }
+            ,android: { priority: "high", notification: { channelId: androidChannelId, sound: "default" } },
+            apns: {
+                headers: { "apns-priority": "10" },
+                payload: { aps: { sound: "default", ...(apnsCategory ? { category: apnsCategory } : {}) } }
+            }
 
         });
 

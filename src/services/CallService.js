@@ -118,7 +118,10 @@ async function list(userId) {
       peerName: peer?.name || "Encryption App user", peerProfileUrl: peer?.profileUrl || null,
       mode: call.mode, direction: String(call.initiatorUserId) === String(userId) ? "outgoing" : "incoming",
       status: call.status, startedAt: call.startedAt || call.createdAt, answeredAt: call.answeredAt || null,
-      endedAt: call.endedAt || null
+      endedAt: call.endedAt || null,
+      durationSeconds: call.answeredAt && call.endedAt
+        ? Math.max(0, Math.floor((new Date(call.endedAt).getTime() - new Date(call.answeredAt).getTime()) / 1000))
+        : null
     };
   }));
 }
