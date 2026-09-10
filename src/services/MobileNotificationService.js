@@ -5,7 +5,7 @@ const s3Util = require("../utils/s3Util");
 const buildResponse = require("../utils/response");
 
 const TITLE = "New encrypted message";
-const MESSAGE = "Open Encryption App to view it.";
+const MESSAGE = "Open the chat to view this secure message.";
 
 const pageNumber = (value, fallback, min, max) => {
   const parsed = Number.parseInt(value, 10);
