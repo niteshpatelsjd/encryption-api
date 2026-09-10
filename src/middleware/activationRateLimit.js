@@ -26,7 +26,14 @@ module.exports = async function activationRateLimit(req, res, next) {
       if (count === 1) await redis.expire(key, ACTIVATION_RATE_WINDOW_SECONDS);
       if (count > ACTIVATION_RATE_LIMIT) {
         const ttl = await redis.ttl(key);
-        return reject(res, ttl > 0 ? ttl : ACTIVATION_RATE_WINDOW_SECONDS);
+        // Cap buckets created by older deployments that used a longer window.
+        if (ttl > ACTIVATION_RATE_WINDOW_SECONDS) {
+          await redis.expire(key, ACTIVATION_RATE_WINDOW_SECONDS);
+        }
+        return reject(
+          res,
+          ttl > 0 ? Math.min(ttl, ACTIVATION_RATE_WINDOW_SECONDS) : ACTIVATION_RATE_WINDOW_SECONDS
+        );
       }
       return next();
     }
