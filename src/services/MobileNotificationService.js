@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
+const User = require("../models/User");
+const s3Util = require("../utils/s3Util");
 const buildResponse = require("../utils/response");
 
 const TITLE = "New encrypted message";
@@ -18,11 +20,38 @@ async function list(userId, deviceId, query = {}) {
   const filter = { ...ownership(userId, deviceId), status: { $ne: 0 } };
   if (query.isRead === "true" || query.isRead === true) filter.isRead = true;
   if (query.isRead === "false" || query.isRead === false) filter.isRead = false;
-  const [content, totalRecords, unreadCount] = await Promise.all([
+  const [rawContent, totalRecords, unreadCount] = await Promise.all([
     Notification.find(filter).sort({ createdAt: -1 }).skip(pageIndex * pageSize).limit(pageSize).lean(),
     Notification.countDocuments(filter),
     Notification.countDocuments({ ...ownership(userId, deviceId), status: { $ne: 0 }, isRead: false })
   ]);
+  const senderIds = [...new Set(rawContent
+    .filter(item => item.type === "NEW_MESSAGE" && mongoose.isValidObjectId(item.data?.senderUserId))
+    .map(item => String(item.data.senderUserId)))];
+  const senders = senderIds.length
+    ? await User.find({ _id: { $in: senderIds }, status: 1 })
+      .select("name profileImageKey profileUrl")
+      .lean()
+    : [];
+  const senderProfiles = new Map(await Promise.all(senders.map(async sender => [
+    String(sender._id),
+    {
+      senderName: sender.name || "Encryption App contact",
+      senderProfileUrl: sender.profileImageKey
+        ? await s3Util.getPreSignedUrl(sender.profileImageKey).catch(() => sender.profileUrl || "")
+        : sender.profileUrl || ""
+    }
+  ])));
+  const content = rawContent.map(item => {
+    const sender = senderProfiles.get(String(item.data?.senderUserId || ""));
+    if (!sender) return item;
+    return {
+      ...item,
+      title: sender.senderName,
+      imageUrl: sender.senderProfileUrl || null,
+      data: { ...item.data, ...sender }
+    };
+  });
   return buildResponse(200, "Notifications fetched", {
     content,
     unreadCount,
@@ -87,7 +116,7 @@ async function remove(userId, deviceId, id) {
     : buildResponse(404, "Notification not found");
 }
 
-async function upsertEncryptedMessage({ userId, deviceId, conversationId, serverMessageId }) {
+async function upsertEncryptedMessage({ userId, deviceId, conversationId, serverMessageId, senderUserId, senderName }) {
   const dedupeKey = `NEW_MESSAGE:${userId}:${deviceId}:${serverMessageId}`;
   return Notification.findOneAndUpdate(
     { dedupeKey },
@@ -98,7 +127,13 @@ async function upsertEncryptedMessage({ userId, deviceId, conversationId, server
         title: TITLE,
         message: MESSAGE,
         type: "NEW_MESSAGE",
-        data: { type: "NEW_MESSAGE", conversationId, serverMessageId },
+        data: {
+          type: "NEW_MESSAGE",
+          conversationId,
+          serverMessageId,
+          ...(senderUserId ? { senderUserId: String(senderUserId) } : {}),
+          ...(senderName ? { senderName } : {})
+        },
         dedupeKey,
         sentStatus: "PENDING"
       }

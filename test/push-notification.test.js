@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Device = require("../src/models/Device");
+const User = require("../src/models/User");
 const fcm = require("../src/services/FcmService");
 const push = require("../src/services/EncryptedMessagePushService");
 const notifications = require("../src/services/MobileNotificationService");
@@ -9,6 +10,9 @@ test("encrypted chat push is device-scoped and never contains plaintext or ciphe
   t.mock.method(Device, "find", () => ({ select() { return this; }, lean: async () => [{
     _id: "device-record", userId: "507f1f77bcf86cd799439011", deviceId: "device-a", pushToken: "fcm-token"
   }] }));
+  t.mock.method(User, "find", () => ({ select() { return this; }, lean: async () => [{
+    _id: "507f1f77bcf86cd799439014", name: "Alice", profileUrl: "https://cdn.example/alice.jpg"
+  }] }));
   let sent;
   let persisted;
   t.mock.method(notifications, "upsertEncryptedMessage", async value => { persisted = value; return { _id: "notification-a" }; });
@@ -16,16 +20,20 @@ test("encrypted chat push is device-scoped and never contains plaintext or ciphe
   t.mock.method(fcm, "sendNotification", async value => { sent = value; return { sentStatus: "SENT" }; });
   await push.notify([{
     recipientUserId: "507f1f77bcf86cd799439011", recipientDeviceId: "device-a",
-    payload: { conversationId: "507f1f77bcf86cd799439012", serverMessageId: "507f1f77bcf86cd799439013", ciphertext: "secret", plaintext: "must-not-leak" }
+    payload: { conversationId: "507f1f77bcf86cd799439012", serverMessageId: "507f1f77bcf86cd799439013", senderUserId: "507f1f77bcf86cd799439014", ciphertext: "secret", plaintext: "must-not-leak" }
   }]);
   assert.equal(sent.token, "fcm-token");
-  assert.equal(sent.title, "New encrypted message");
+  assert.equal(sent.title, "Alice");
+  assert.equal(sent.imageUrl, "https://cdn.example/alice.jpg");
   assert.equal(sent.groupKey, "chat-507f1f77bcf86cd799439012");
   assert.deepEqual(sent.data, {
     type: "NEW_MESSAGE",
     conversationId: "507f1f77bcf86cd799439012",
     serverMessageId: "507f1f77bcf86cd799439013",
-    notificationId: "notification-a"
+    notificationId: "notification-a",
+    senderUserId: "507f1f77bcf86cd799439014",
+    senderName: "Alice",
+    senderProfileUrl: "https://cdn.example/alice.jpg"
   });
   assert.equal(JSON.stringify(sent).includes("secret"), false);
   assert.equal(JSON.stringify(sent).includes("must-not-leak"), false);
