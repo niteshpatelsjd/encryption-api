@@ -8,7 +8,8 @@ async function sendNotification({
     data,
     imageUrl,
     androidChannelId = "default",
-    apnsCategory
+    apnsCategory,
+    groupKey
 }) {
 
     if (!token) {
@@ -46,10 +47,26 @@ async function sendNotification({
             },
 
             data: stringifyData(data)
-            ,android: { priority: "high", notification: { channelId: androidChannelId, sound: "default" } },
+            ,android: {
+                priority: "high",
+                notification: {
+                    channelId: androidChannelId,
+                    sound: "default",
+                    ...(groupKey ? { tag: groupKey } : {})
+                }
+            },
             apns: {
-                headers: { "apns-priority": "10" },
-                payload: { aps: { sound: "default", ...(apnsCategory ? { category: apnsCategory } : {}) } }
+                headers: {
+                    "apns-priority": "10",
+                    ...(groupKey ? { "apns-collapse-id": groupKey } : {})
+                },
+                payload: {
+                    aps: {
+                        sound: "default",
+                        ...(apnsCategory ? { category: apnsCategory } : {}),
+                        ...(groupKey ? { threadId: groupKey } : {})
+                    }
+                }
             }
 
         });

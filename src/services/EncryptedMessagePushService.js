@@ -34,6 +34,7 @@ async function notify(deliveries) {
       token: device.pushToken,
       title: notifications.TITLE,
       message: notifications.MESSAGE,
+      groupKey: `chat-${String(delivery.payload.conversationId)}`,
       data: {
         type: "NEW_MESSAGE",
         conversationId: String(delivery.payload.conversationId),

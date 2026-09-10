@@ -20,6 +20,7 @@ test("encrypted chat push is device-scoped and never contains plaintext or ciphe
   }]);
   assert.equal(sent.token, "fcm-token");
   assert.equal(sent.title, "New encrypted message");
+  assert.equal(sent.groupKey, "chat-507f1f77bcf86cd799439012");
   assert.deepEqual(sent.data, {
     type: "NEW_MESSAGE",
     conversationId: "507f1f77bcf86cd799439012",
