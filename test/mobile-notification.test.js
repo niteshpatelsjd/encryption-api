@@ -37,3 +37,27 @@ test("encrypted message notification persistence is idempotent and contains no m
   assert.equal(JSON.stringify(update).includes("secret"), false);
   assert.equal(JSON.stringify(update).includes("hello"), false);
 });
+
+test("viewing a chat marks only that conversation's unread message notifications as read", async t => {
+  let updateFilter;
+  t.mock.method(Notification, "updateMany", async filter => {
+    updateFilter = filter;
+    return { modifiedCount: 2 };
+  });
+  t.mock.method(Notification, "countDocuments", async () => 1);
+
+  const conversationId = "507f1f77bcf86cd799439012";
+  const result = await service.markConversationRead(
+    "507f1f77bcf86cd799439011",
+    "device-a",
+    conversationId
+  );
+
+  assert.equal(result.responseCode, 200);
+  assert.equal(result.responseBody.updatedCount, 2);
+  assert.equal(result.responseBody.unreadCount, 1);
+  assert.equal(updateFilter.type, "NEW_MESSAGE");
+  assert.equal(updateFilter.isRead, false);
+  assert.equal(updateFilter["data.conversationId"], conversationId);
+  assert.deepEqual(updateFilter.$or, [{ deviceId: "device-a" }, { deviceId: null }]);
+});

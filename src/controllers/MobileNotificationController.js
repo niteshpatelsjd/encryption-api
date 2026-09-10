@@ -15,6 +15,7 @@ const handle = handler => async (req, res) => {
 module.exports = {
   list: handle(req => service.list(req.user.userId, req.user.deviceId, req.query)),
   markRead: handle(req => service.markRead(req.user.userId, req.user.deviceId, req.params.id)),
+  markConversationRead: handle(req => service.markConversationRead(req.user.userId, req.user.deviceId, req.params.conversationId)),
   markAllRead: handle(req => service.markAllRead(req.user.userId, req.user.deviceId)),
   remove: handle(req => service.remove(req.user.userId, req.user.deviceId, req.params.id))
 };

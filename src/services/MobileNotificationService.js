@@ -45,6 +45,28 @@ async function markRead(userId, deviceId, id) {
     : buildResponse(404, "Notification not found");
 }
 
+async function markConversationRead(userId, deviceId, conversationId) {
+  if (!mongoose.isValidObjectId(conversationId)) return buildResponse(400, "Invalid conversationId");
+  const result = await Notification.updateMany(
+    {
+      ...ownership(userId, deviceId),
+      status: { $ne: 0 },
+      isRead: false,
+      type: "NEW_MESSAGE",
+      "data.conversationId": conversationId
+    },
+    { $set: { isRead: true, readAt: new Date() } }
+  );
+  const unreadCount = await Notification.countDocuments({
+    ...ownership(userId, deviceId),
+    status: { $ne: 0 },
+    isRead: false
+  });
+  return buildResponse(200, "Conversation notifications marked as read", {
+    updatedCount: result.modifiedCount || 0,
+    unreadCount
+  });
+}
 async function markAllRead(userId, deviceId) {
   const result = await Notification.updateMany(
     { ...ownership(userId, deviceId), status: { $ne: 0 }, isRead: false },
@@ -96,4 +118,4 @@ async function recordDelivery(id, result) {
   );
 }
 
-module.exports = { list, markRead, markAllRead, remove, upsertEncryptedMessage, recordDelivery, TITLE, MESSAGE };
+module.exports = { list, markRead, markConversationRead, markAllRead, remove, upsertEncryptedMessage, recordDelivery, TITLE, MESSAGE };
