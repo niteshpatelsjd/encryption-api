@@ -22,6 +22,9 @@ const initializeSocket = require("./socket");
 const swaggerSpec = require("./config/SwaggerConfig"); // 👈 import swagger config
 
 const app = express();
+// The public API is behind one local Nginx reverse proxy. Trust only that hop so
+// req.ip identifies the real client instead of rate-limiting every user as Nginx.
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(morgan("dev"));
 
