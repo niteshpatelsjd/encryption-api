@@ -91,6 +91,19 @@ async function send({ senderUserId, senderDeviceId, payload }) {
   if (authorization.errorCode) return failure(messageData.clientMessageId, authorization.errorCode);
   const senderPreference = authorization.senderPreference;
 
+  let attachment = null;
+  if (messageData.attachmentId) {
+    attachment = await Attachment.findOne({
+      _id: messageData.attachmentId,
+      conversationId: messageData.conversationId,
+      uploaderUserId: senderUserId,
+      uploaderDeviceId: senderDeviceId,
+      status: "READY",
+      messageId: null
+    });
+    if (!attachment) return failure(messageData.clientMessageId, ErrorCodes.INVALID_MESSAGE);
+  }
+
   if (messageData.action) {
     if (!actionTarget) return failure(messageData.clientMessageId, ErrorCodes.MESSAGE_NOT_FOUND);
     if (["EDIT", "DELETE"].includes(messageData.action.type) && String(actionTarget.senderUserId) !== String(senderUserId)) {
@@ -115,6 +128,9 @@ async function send({ senderUserId, senderDeviceId, payload }) {
       senderUserId,
       ...new Set(messageData.envelopes.map(envelope => envelope.recipientUserId))
     ]) : Promise.resolve(),
+    result.created && attachment
+      ? Attachment.updateOne({ _id: attachment._id, messageId: null }, { $set: { messageId: result.message._id, expiresAt: null } })
+      : Promise.resolve(),
     !messageData.action ? messageRepo.updateConversationActivity(result.message) : Promise.resolve()
   ]);
 
@@ -244,3 +260,4 @@ async function receipt({ userId, deviceId, payload, receiptType }) {
 }
 
 module.exports = { send, sync, history, receipt };
+

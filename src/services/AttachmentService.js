@@ -4,7 +4,7 @@ const ConversationMember = require("../models/ConversationMember");
 const s3Util = require("../utils/s3Util");
 const buildResponse = require("../utils/response");
 
-const MAX_ENCRYPTED_BYTES = 105 * 1024 * 1024;
+const MAX_ENCRYPTED_BYTES = 200 * 1024 * 1024 + 16;
 const HASH_PATTERN = /^[0-9a-f]{64}$/i;
 
 async function member(conversationId, userId) {
