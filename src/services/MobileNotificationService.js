@@ -25,6 +25,21 @@ async function list(userId, deviceId, query = {}) {
     Notification.countDocuments(filter),
     Notification.countDocuments({ ...ownership(userId, deviceId), status: { $ne: 0 }, isRead: false })
   ]);
+  const conversationIds = [...new Set(rawContent
+    .filter(item => item.type === "NEW_MESSAGE" && item.data?.conversationId)
+    .map(item => String(item.data.conversationId)))];
+  const conversationUnreadCounts = new Map(await Promise.all(
+    conversationIds.map(async conversationId => [
+      conversationId,
+      await Notification.countDocuments({
+        ...ownership(userId, deviceId),
+        status: { $ne: 0 },
+        isRead: false,
+        type: "NEW_MESSAGE",
+        "data.conversationId": conversationId
+      })
+    ])
+  ));
   const senderIds = [...new Set(rawContent
     .filter(item => item.type === "NEW_MESSAGE" && mongoose.isValidObjectId(item.data?.senderUserId))
     .map(item => String(item.data.senderUserId)))];
@@ -44,12 +59,19 @@ async function list(userId, deviceId, query = {}) {
   ])));
   const content = rawContent.map(item => {
     const sender = senderProfiles.get(String(item.data?.senderUserId || ""));
-    if (!sender) return item;
+    const data = {
+      ...item.data,
+      conversationUnreadCount: conversationUnreadCounts.get(String(item.data?.conversationId || "")) || 0
+    };
+    if (!sender) return { ...item, data };
     return {
       ...item,
       title: sender.senderName,
       imageUrl: sender.senderProfileUrl || null,
-      data: { ...item.data, ...sender }
+      data: {
+        ...data,
+        ...sender
+      }
     };
   });
   return buildResponse(200, "Notifications fetched", {
@@ -104,6 +126,21 @@ async function markAllRead(userId, deviceId) {
   return buildResponse(200, "All notifications marked as read", { updatedCount: result.modifiedCount || 0 });
 }
 
+async function removeConversation(userId, deviceId, conversationId) {
+  if (!mongoose.isValidObjectId(conversationId)) return buildResponse(400, "Invalid conversationId");
+  const result = await Notification.updateMany(
+    {
+      ...ownership(userId, deviceId),
+      status: { $ne: 0 },
+      type: "NEW_MESSAGE",
+      "data.conversationId": conversationId
+    },
+    { $set: { status: 0 } }
+  );
+  return buildResponse(200, "Conversation notifications deleted", {
+    deletedCount: result.modifiedCount || 0
+  });
+}
 async function remove(userId, deviceId, id) {
   if (!mongoose.isValidObjectId(id)) return buildResponse(404, "Notification not found");
   const notification = await Notification.findOneAndUpdate(
@@ -153,4 +190,5 @@ async function recordDelivery(id, result) {
   );
 }
 
-module.exports = { list, markRead, markConversationRead, markAllRead, remove, upsertEncryptedMessage, recordDelivery, TITLE, MESSAGE };
+module.exports = { list, markRead, markConversationRead, markAllRead, removeConversation, remove, upsertEncryptedMessage, recordDelivery, TITLE, MESSAGE };
+

@@ -12,6 +12,7 @@ const upload = multer({ storage });
 router.get("/me", auth, mobileNotificationController.list);
 router.patch("/read-all", auth, mobileNotificationController.markAllRead);
 router.patch("/conversation/:conversationId/read", auth, mobileNotificationController.markConversationRead);
+router.delete("/conversation/:conversationId", auth, mobileNotificationController.removeConversation);
 router.patch("/:id/read", auth, mobileNotificationController.markRead);
 router.delete("/:id", auth, mobileNotificationController.remove);
 /**

@@ -17,5 +17,6 @@ module.exports = {
   markRead: handle(req => service.markRead(req.user.userId, req.user.deviceId, req.params.id)),
   markConversationRead: handle(req => service.markConversationRead(req.user.userId, req.user.deviceId, req.params.conversationId)),
   markAllRead: handle(req => service.markAllRead(req.user.userId, req.user.deviceId)),
+  removeConversation: handle(req => service.removeConversation(req.user.userId, req.user.deviceId, req.params.conversationId)),
   remove: handle(req => service.remove(req.user.userId, req.user.deviceId, req.params.id))
 };
