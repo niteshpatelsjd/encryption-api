@@ -110,6 +110,42 @@ async function sendNotification({
 
 }
 
+async function sendDataOnly({ token, data, ttlMs = 45 * 1000 }) {
+    if (!token) {
+        return { sentStatus: "FAILED", failureReason: "Device token not found", firebaseMessageId: null };
+    }
+    const messaging = firebaseConfig.getMessaging();
+    if (!messaging) {
+        return { sentStatus: "FAILED", failureReason: "Firebase is not configured", firebaseMessageId: null };
+    }
+    const normalizedTtl = Math.min(Math.max(Number(ttlMs) || 45 * 1000, 1000), 60 * 1000);
+    try {
+        const firebaseMessageId = await messaging.send({
+            token,
+            data: stringifyData(data),
+            android: { priority: "high", ttl: normalizedTtl },
+            apns: {
+                headers: {
+                    "apns-priority": "5",
+                    "apns-push-type": "background",
+                    "apns-expiration": String(Math.floor((Date.now() + normalizedTtl) / 1000))
+                },
+                payload: { aps: { contentAvailable: true } }
+            }
+        });
+        logger.info("FCM data message sent", { firebaseMessageId, type: data?.type || null });
+        return { sentStatus: "SENT", failureReason: null, firebaseMessageId };
+    } catch (error) {
+        logger.error("FCM data message failed", { error: error.message, code: error.code || null });
+        return {
+            sentStatus: "FAILED",
+            failureReason: error.message,
+            errorCode: error.code || null,
+            firebaseMessageId: null
+        };
+    }
+}
+
 function stringifyData(data = {}) {
 
     return Object.entries(data).reduce((result, [key, value]) => {
@@ -126,5 +162,6 @@ function stringifyData(data = {}) {
 }
 
 module.exports = {
-    sendNotification
+    sendNotification,
+    sendDataOnly
 };

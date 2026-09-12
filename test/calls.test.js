@@ -19,9 +19,13 @@ test("call start requires both users to belong to the conversation", async t => 
 });
 
 test("call response rejects the initiator and unavailable calls", async t => {
-  t.mock.method(CallSession, "findOne", async () => null);
+  let filter;
+  t.mock.method(CallSession, "findOneAndUpdate", async value => { filter = value; return null; });
   const result = await callService.respond(recipient, "device-b", new mongoose.Types.ObjectId(), { action: "accept" });
   assert.equal(result.responseCode, 404);
+  assert.equal(String(filter.participantUserIds), String(recipient));
+  assert.equal(String(filter.initiatorUserId.$ne), String(recipient));
+  assert.equal(filter.status, "RINGING");
 });
 
 test("ending an unavailable call is idempotent", async t => {

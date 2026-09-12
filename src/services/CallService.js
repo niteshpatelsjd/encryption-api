@@ -74,21 +74,27 @@ async function start(userId, deviceId, body) {
   return Object.assign(buildResponse(201, "Call started", {
     callId: String(call._id), conversationId: String(call.conversationId), roomName: call.livekitRoomName,
     mode: call.mode, ...credentials
-  }), { notifyUserIds: [String(recipientUserId)], callerName: caller?.name || "Encryption App user", callerProfileUrl: await userProfileUrl(caller) });
+  }), { notifyUserIds: [String(recipientUserId)], callerName: caller?.name || "A contact", callerProfileUrl: await userProfileUrl(caller) });
 }
 
 async function respond(userId, deviceId, callId, body) {
   if (!mongoose.isValidObjectId(callId) || !["accept", "decline"].includes(body?.action)) {
     return buildResponse(400, "Invalid call response");
   }
-  const call = await CallSession.findOne({ _id: callId, participantUserIds: userId, status: "RINGING" });
-  if (!call || String(call.initiatorUserId) === String(userId)) return buildResponse(404, "Call is no longer available");
+  const update = body.action === "decline"
+    ? { $set: { status: "DECLINED", endedAt: new Date() } }
+    : { $set: { status: "ACTIVE", answeredAt: new Date() } };
+  const call = await CallSession.findOneAndUpdate({
+    _id: callId,
+    participantUserIds: userId,
+    initiatorUserId: { $ne: userId },
+    status: "RINGING"
+  }, update, { new: true, runValidators: true });
+  if (!call) return buildResponse(404, "Call is no longer available");
   if (body.action === "decline") {
-    call.status = "DECLINED"; call.endedAt = new Date(); await call.save();
     return Object.assign(buildResponse(200, "Call declined", { callId: String(call._id) }),
       { notifyUserIds: [String(call.initiatorUserId)] });
   }
-  call.status = "ACTIVE"; call.answeredAt = new Date(); await call.save();
   const user = await User.findById(userId).select("name").lean();
   const credentials = await participantToken(call, userId, deviceId, user?.name);
   return Object.assign(buildResponse(200, "Call accepted", {

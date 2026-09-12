@@ -23,7 +23,7 @@ async function start(req, res) {
         mode: result.responseBody.mode
       };
       notify(req, result.notifyUserIds, SocketEvents.CALL_INVITE, invite);
-      void callPush.notify(result.notifyUserIds, invite).catch(error =>
+      await callPush.notify(result.notifyUserIds, invite).catch(error =>
         logger.warn("Call push dispatch failed", { callId: invite.callId, error: error.message }));
     }
     delete result.notifyUserIds; delete result.callerName; delete result.callerProfileUrl;

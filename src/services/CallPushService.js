@@ -15,21 +15,18 @@ async function notify(recipientUserIds, { callId, conversationId, callerUserId, 
   }).select("+pushToken userId deviceId").lean();
 
   await Promise.allSettled(devices.filter(device => device.pushToken).map(async device => {
-    const result = await fcm.sendNotification({
+    const result = await fcm.sendDataOnly({
       token: device.pushToken,
-      title: callerName || "Incoming call",
-      message: `Incoming secure ${mode === "video" ? "video" : "audio"} call`,
       data: {
         type: "CALL_INVITE",
         callId: String(callId),
         conversationId: String(conversationId),
         callerUserId: String(callerUserId),
-        callerName: callerName || "Encryption App user",
+        callerName: callerName || "A contact",
         callerProfileUrl: callerProfileUrl || "",
-        mode
+        mode: mode === "video" ? "video" : "audio"
       },
-      androidChannelId: "calls",
-      apnsCategory: "INCOMING_CALL"
+      ttlMs: 45 * 1000
     });
     if (invalidTokenCodes.has(result.errorCode)) {
       await Device.updateOne(
