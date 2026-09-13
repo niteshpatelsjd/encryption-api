@@ -146,6 +146,49 @@ async function sendDataOnly({ token, data, ttlMs = 45 * 1000 }) {
     }
 }
 
+async function sendIosCallAlert({ token, data, callerName, mode, callId }) {
+    if (!token) {
+        return { sentStatus: "FAILED", failureReason: "Device token not found", firebaseMessageId: null };
+    }
+    const messaging = firebaseConfig.getMessaging();
+    if (!messaging) {
+        return { sentStatus: "FAILED", failureReason: "Firebase is not configured", firebaseMessageId: null };
+    }
+    try {
+        const safeName = callerName || "A contact";
+        const safeMode = mode === "video" ? "video" : "audio";
+        const firebaseMessageId = await messaging.send({
+            token,
+            data: stringifyData(data),
+            apns: {
+                headers: {
+                    "apns-priority": "10",
+                    "apns-push-type": "alert",
+                    "apns-expiration": String(Math.floor((Date.now() + 45 * 1000) / 1000))
+                },
+                payload: {
+                    aps: {
+                        alert: { title: safeName, body: `Incoming secure ${safeMode} call` },
+                        sound: "default",
+                        category: "INCOMING_SECURE_CALL",
+                        contentAvailable: true,
+                        interruptionLevel: "time-sensitive",
+                        threadId: `call-${String(callId)}`
+                    }
+                }
+            }
+        });
+        return { sentStatus: "SENT", failureReason: null, firebaseMessageId };
+    } catch (error) {
+        return {
+            sentStatus: "FAILED",
+            failureReason: error.message,
+            errorCode: error.code || null,
+            firebaseMessageId: null
+        };
+    }
+}
+
 function stringifyData(data = {}) {
 
     return Object.entries(data).reduce((result, [key, value]) => {
@@ -163,5 +206,6 @@ function stringifyData(data = {}) {
 
 module.exports = {
     sendNotification,
-    sendDataOnly
+    sendDataOnly,
+    sendIosCallAlert
 };

@@ -23,7 +23,10 @@ async function start(req, res) {
         mode: result.responseBody.mode
       };
       notify(req, result.notifyUserIds, SocketEvents.CALL_INVITE, invite);
-      await callPush.notify(result.notifyUserIds, invite).catch(error =>
+      void callPush.notify(result.notifyUserIds, invite, {
+        callerUserId: req.user.userId,
+        callerDeviceId: req.user.deviceId
+      }).catch(error =>
         logger.warn("Call push dispatch failed", { callId: invite.callId, error: error.message }));
     }
     delete result.notifyUserIds; delete result.callerName; delete result.callerProfileUrl;
@@ -38,8 +41,12 @@ async function respond(req, res) {
   try {
     const result = await callService.respond(req.user.userId, req.user.deviceId, req.params.callId, req.body);
     const event = req.body?.action === "accept" ? SocketEvents.CALL_ACCEPTED : SocketEvents.CALL_DECLINED;
-    if (result.responseCode === 200) notify(req, result.notifyUserIds, event, { callId: req.params.callId });
-    delete result.notifyUserIds;
+    if (result.responseCode === 200) {
+      notify(req, result.notifyUserIds, event, { callId: req.params.callId });
+      void callPush.notifyState(result.stateNotifyUserIds, result.statePayload).catch(error =>
+        logger.warn("Call state push failed", { callId: req.params.callId, error: error.message }));
+    }
+    delete result.notifyUserIds; delete result.stateNotifyUserIds; delete result.statePayload;
     return res.status(result.responseCode).json(result);
   } catch (error) {
     logger.error("Respond to call failed", { userId: req.user?.userId, callId: req.params.callId, error: error.message });
@@ -51,11 +58,29 @@ async function end(req, res) {
   try {
     const result = await callService.end(req.user.userId, req.params.callId);
     notify(req, result.notifyUserIds, SocketEvents.CALL_ENDED, { callId: req.params.callId });
-    delete result.notifyUserIds;
+    if (result.statePayload) void callPush.notifyState(result.stateNotifyUserIds, result.statePayload).catch(error =>
+      logger.warn("Call state push failed", { callId: req.params.callId, error: error.message }));
+    delete result.notifyUserIds; delete result.stateNotifyUserIds; delete result.statePayload;
     return res.status(result.responseCode).json(result);
   } catch (error) {
     logger.error("End call failed", { userId: req.user?.userId, callId: req.params.callId, error: error.message });
     return res.status(500).json(buildResponse(500, "Unable to end call"));
+  }
+}
+
+async function cancel(req, res) {
+  try {
+    const result = await callService.cancel(req.user.userId, req.params.callId);
+    if (result.responseCode === 200) {
+      notify(req, result.notifyUserIds, SocketEvents.CALL_CANCELLED, { callId: req.params.callId });
+      void callPush.notifyState(result.stateNotifyUserIds, result.statePayload).catch(error =>
+        logger.warn("Call state push failed", { callId: req.params.callId, error: error.message }));
+    }
+    delete result.notifyUserIds; delete result.stateNotifyUserIds; delete result.statePayload;
+    return res.status(result.responseCode).json(result);
+  } catch (error) {
+    logger.error("Cancel call failed", { userId: req.user?.userId, callId: req.params.callId, error: error.message });
+    return res.status(500).json(buildResponse(500, "Unable to cancel call"));
   }
 }
 
@@ -69,4 +94,4 @@ async function list(req, res) {
   }
 }
 
-module.exports = { start, respond, end, list };
+module.exports = { start, respond, cancel, end, list };

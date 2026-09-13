@@ -18,6 +18,7 @@ const userSearchRoutes = require("./routes/UserSearchRoute");
 const callRoutes = require("./routes/CallRoute");
 const attachmentRoutes = require("./routes/AttachmentRoute");
 const initializeSocket = require("./socket");
+const callExpiryWorker = require("./workers/CallExpiryWorker");
 
 const swaggerSpec = require("./config/SwaggerConfig"); // 👈 import swagger config
 
@@ -66,6 +67,7 @@ const PORT = process.env.PORT || 6000;
 const server = http.createServer(app);
 const io = initializeSocket(server);
 app.set("io", io);
+callExpiryWorker.start(io);
 
 async function start() {
   await connectDB();

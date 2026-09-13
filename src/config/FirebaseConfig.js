@@ -11,6 +11,11 @@ function getFirebaseApp() {
         }
 
         const serviceAccount = getServiceAccount();
+        const configuredProjectId = serviceAccount?.projectId || process.env.GOOGLE_CLOUD_PROJECT || null;
+        const iosProjectId = process.env.IOS_FIREBASE_PROJECT_ID?.trim() || null;
+        if (iosProjectId && configuredProjectId && iosProjectId !== configuredProjectId) {
+            throw new Error("Firebase project mismatch: backend credentials do not match the iOS Firebase project");
+        }
 
         let app;
 
@@ -26,7 +31,7 @@ function getFirebaseApp() {
         }
 
         logger.info("Firebase initialized successfully", {
-            projectId: serviceAccount?.projectId || process.env.GOOGLE_CLOUD_PROJECT || null
+            projectId: configuredProjectId
         });
 
         return app;

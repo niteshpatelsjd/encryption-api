@@ -8,6 +8,7 @@ const buildResponse = require("../utils/response");
 const s3Util = require("../utils/s3Util");
 
 const activeStatuses = ["RINGING", "ACTIVE"];
+const CALL_INVITE_TTL_MS = Math.min(Math.max(Number(process.env.CALL_INVITE_TTL_SECONDS) || 45, 15), 120) * 1000;
 
 async function userProfileUrl(user) {
   if (user?.profileImageKey) return s3Util.getPreSignedUrl(user.profileImageKey);
@@ -50,9 +51,23 @@ async function memberIds(conversationId) {
 
 async function start(userId, deviceId, body) {
   const { conversationId, recipientUserId, mode } = body || {};
+  const clientCallId = typeof body?.clientCallId === "string" && body.clientCallId.trim()
+    ? body.clientCallId.trim()
+    : null;
   if (!mongoose.isValidObjectId(conversationId) || !mongoose.isValidObjectId(recipientUserId) ||
-      !["audio", "video"].includes(mode) || String(userId) === String(recipientUserId)) {
+      !["audio", "video"].includes(mode) || String(userId) === String(recipientUserId) ||
+      (clientCallId && clientCallId.length > 128)) {
     return buildResponse(400, "Invalid call request");
+  }
+  if (clientCallId) {
+    const existing = await CallSession.findOne({ initiatorUserId: userId, clientCallId }).lean();
+    if (existing) {
+      return Object.assign(buildResponse(200, "Call request already processed", {
+        callId: String(existing._id), conversationId: String(existing.conversationId),
+        roomName: existing.livekitRoomName, mode: existing.mode, status: existing.status,
+        expiresAt: existing.expiresAt
+      }), { duplicate: true });
+    }
   }
   const members = await memberIds(conversationId);
   if (!members.includes(String(userId)) || !members.includes(String(recipientUserId))) {
@@ -60,20 +75,34 @@ async function start(userId, deviceId, body) {
   }
   await CallSession.updateMany({ initiatorUserId: userId, status: { $in: activeStatuses } },
     { $set: { status: "ENDED", endedAt: new Date() } });
-  const call = await CallSession.create({
+  const expiresAt = new Date(Date.now() + CALL_INVITE_TTL_MS);
+  let call;
+  try {
+    call = await CallSession.create({
     conversationId,
     livekitRoomName: `call-${crypto.randomUUID()}`,
     initiatorUserId: userId,
     participantUserIds: [userId, recipientUserId],
     mode,
+    clientCallId,
     status: "RINGING",
-    startedAt: new Date()
-  });
+    startedAt: new Date(),
+    expiresAt
+    });
+  } catch (error) {
+    if (error?.code !== 11000 || !clientCallId) throw error;
+    const existing = await CallSession.findOne({ initiatorUserId: userId, clientCallId }).lean();
+    return Object.assign(buildResponse(200, "Call request already processed", {
+      callId: String(existing._id), conversationId: String(existing.conversationId),
+      roomName: existing.livekitRoomName, mode: existing.mode, status: existing.status,
+      expiresAt: existing.expiresAt
+    }), { duplicate: true });
+  }
   const caller = await User.findById(userId).select("name profileImageKey profileUrl").lean();
   const credentials = await participantToken(call, userId, deviceId, caller?.name);
   return Object.assign(buildResponse(201, "Call started", {
     callId: String(call._id), conversationId: String(call.conversationId), roomName: call.livekitRoomName,
-    mode: call.mode, ...credentials
+    mode: call.mode, expiresAt: call.expiresAt, ...credentials
   }), { notifyUserIds: [String(recipientUserId)], callerName: caller?.name || "A contact", callerProfileUrl: await userProfileUrl(caller) });
 }
 
@@ -81,6 +110,7 @@ async function respond(userId, deviceId, callId, body) {
   if (!mongoose.isValidObjectId(callId) || !["accept", "decline"].includes(body?.action)) {
     return buildResponse(400, "Invalid call response");
   }
+  const now = new Date();
   const update = body.action === "decline"
     ? { $set: { status: "DECLINED", endedAt: new Date() } }
     : { $set: { status: "ACTIVE", answeredAt: new Date() } };
@@ -88,19 +118,30 @@ async function respond(userId, deviceId, callId, body) {
     _id: callId,
     participantUserIds: userId,
     initiatorUserId: { $ne: userId },
-    status: "RINGING"
+    status: "RINGING",
+    expiresAt: { $gt: now }
   }, update, { new: true, runValidators: true });
-  if (!call) return buildResponse(404, "Call is no longer available");
+  if (!call) {
+    const expired = await CallSession.findOneAndUpdate(
+      { _id: callId, status: "RINGING", expiresAt: { $lte: now } },
+      { $set: { status: "EXPIRED", endedAt: now } }, { new: true }
+    ).lean();
+    return buildResponse(expired ? 410 : 404, expired ? "Call invite has expired" : "Call is no longer available");
+  }
   if (body.action === "decline") {
     return Object.assign(buildResponse(200, "Call declined", { callId: String(call._id) }),
-      { notifyUserIds: [String(call.initiatorUserId)] });
+      { notifyUserIds: [String(call.initiatorUserId)], statePayload: {
+        type: "CALL_DECLINED", callId: String(call._id), conversationId: String(call.conversationId), state: "DECLINED"
+      }, stateNotifyUserIds: call.participantUserIds.map(String) });
   }
   const user = await User.findById(userId).select("name").lean();
   const credentials = await participantToken(call, userId, deviceId, user?.name);
   return Object.assign(buildResponse(200, "Call accepted", {
     callId: String(call._id), conversationId: String(call.conversationId), roomName: call.livekitRoomName,
     mode: call.mode, ...credentials
-  }), { notifyUserIds: [String(call.initiatorUserId)] });
+  }), { notifyUserIds: [String(call.initiatorUserId)], statePayload: {
+    type: "CALL_ACCEPTED", callId: String(call._id), conversationId: String(call.conversationId), state: "ACTIVE"
+  }, stateNotifyUserIds: call.participantUserIds.map(String) });
 }
 
 async function end(userId, callId) {
@@ -111,7 +152,29 @@ async function end(userId, callId) {
   ).lean();
   if (!call) return buildResponse(200, "Call already ended", { callId });
   return Object.assign(buildResponse(200, "Call ended", { callId: String(call._id) }), {
-    notifyUserIds: call.participantUserIds.map(String).filter(id => id !== String(userId))
+    notifyUserIds: call.participantUserIds.map(String).filter(id => id !== String(userId)),
+    statePayload: {
+      type: "CALL_ENDED", callId: String(call._id), conversationId: String(call.conversationId), state: "ENDED"
+    },
+    stateNotifyUserIds: call.participantUserIds.map(String)
+  });
+}
+
+async function cancel(userId, callId) {
+  if (!mongoose.isValidObjectId(callId)) return buildResponse(400, "Invalid callId");
+  const call = await CallSession.findOneAndUpdate(
+    { _id: callId, initiatorUserId: userId, status: "RINGING" },
+    { $set: { status: "CANCELLED", endedAt: new Date() } },
+    { new: true }
+  ).lean();
+  if (!call) return buildResponse(404, "Call is no longer available");
+  return Object.assign(buildResponse(200, "Call cancelled", { callId: String(call._id) }), {
+    notifyUserIds: call.participantUserIds.map(String).filter(id => id !== String(userId)),
+    statePayload: {
+      type: "CALL_CANCELLED", callId: String(call._id),
+      conversationId: String(call.conversationId), state: "CANCELLED"
+    },
+    stateNotifyUserIds: call.participantUserIds.map(String)
   });
 }
 
@@ -158,4 +221,4 @@ async function list(userId, options = {}) {
   });
 }
 
-module.exports = { start, respond, end, list };
+module.exports = { start, respond, cancel, end, list };
