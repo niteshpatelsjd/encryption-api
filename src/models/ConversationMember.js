@@ -20,6 +20,8 @@ const ConversationMemberSchema = new mongoose.Schema(
       default: "MEMBER"
     },
     joinedAt: { type: Date, default: Date.now },
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "users", default: null },
+    leftAt: { type: Date, default: null },
     lastReadMessageId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",

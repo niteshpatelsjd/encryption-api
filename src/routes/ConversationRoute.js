@@ -47,6 +47,14 @@ const messageController = require("../controllers/MessageController");
  */
 router.post("/", auth, controller.create);
 router.get("/", auth, controller.list);
+router.post("/groups", auth, controller.createGroup);
+router.get("/groups/:conversationId", auth, controller.getGroup);
+router.patch("/groups/:conversationId", auth, controller.updateGroup);
+router.post("/groups/:conversationId/members", auth, controller.addGroupMember);
+router.delete("/groups/:conversationId/members/me", auth, controller.leaveGroup);
+router.delete("/groups/:conversationId/members/:userId", auth, controller.removeGroupMember);
+router.post("/groups/:conversationId/admins/:userId", auth, controller.promoteGroupMember);
+router.delete("/groups/:conversationId/admins/:userId", auth, controller.demoteGroupMember);
 router.delete("/:conversationId", auth, controller.remove);
 
 /**

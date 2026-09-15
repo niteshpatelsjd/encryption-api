@@ -25,6 +25,11 @@ const ConversationSchema = new mongoose.Schema(
       default: null,
       trim: true
     },
+    groupName: { type: String, trim: true, maxlength: 100, default: null },
+    groupDescription: { type: String, trim: true, maxlength: 512, default: null },
+    groupAvatarKey: { type: String, trim: true, default: null },
+    groupVersion: { type: Number, min: 1, default: 1 },
+    encryptionEpoch: { type: Number, min: 1, default: 1 },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "users",

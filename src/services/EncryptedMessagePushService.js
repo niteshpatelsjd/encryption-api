@@ -58,6 +58,7 @@ async function notify(deliveries) {
       token: device.pushToken,
       title: senderName,
       message: "Sent you an encrypted message",
+      ...(senderProfileUrl ? { imageUrl: senderProfileUrl } : {}),
       groupKey: `chat-${String(delivery.payload.conversationId)}`,
       data: {
         type: "NEW_MESSAGE",
